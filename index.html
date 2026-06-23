@@ -3439,7 +3439,12 @@ function stSaveP3(){
 function stLoadP3(){
   const arr = stLoad(SK.p3);
   if(!arr.length) return false;
-  p3WeekData = arr.map(e => ({ label: e.label, rows: e.rows }));
+  p3WeekData = arr.map(e => ({
+    label: e.label,
+    rows: e.rows,
+    manualTotal: e.manualTotal||null,
+    rowsSum: (e.rows||[]).reduce((s,r)=>s+(r.units||0),0)
+  }));
   return true;
 }
 
