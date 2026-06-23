@@ -487,7 +487,27 @@ td.src{text-align:center;width:110px} td.art{color:var(--fg2)}
   <!-- ════════════════ STORAGE MANAGER ════════════════ -->
   <div id="p5" style="display:none">
     <div class="tab-desc">ข้อมูลที่บันทึกไว้ใน browser — เก็บสูงสุด 4 สัปดาห์ต่อ Phase · overwrite อัตโนมัติถ้า label ซ้ำ</div>
-    <div id="storage-body"></div>
+    <div class="panel" style="margin-bottom:1rem">
+    <div class="panel-title">☁ Google Sheets Sync</div>
+    <div style="font-size:12px;color:var(--fg3);margin-bottom:.75rem">บันทึกและโหลดข้อมูลจาก Google Sheets เพื่อใช้ได้ทุกเครื่อง</div>
+    <div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap;margin-bottom:.75rem">
+      <input type="text" id="gs-url-input" placeholder="วาง Apps Script Web App URL ที่นี่..."
+        style="flex:1;min-width:200px;background:var(--bg3);border:1px solid var(--line2);border-radius:8px;padding:8px 12px;font-size:12px;font-family:var(--mono);color:var(--fg);outline:none"
+        oninput="gsSetUrl(this.value)">
+      <button class="btn" style="height:36px;background:var(--teal);color:#fff;border:none;padding:0 16px;font-size:12px"
+        onclick="gsSetUrl($('gs-url-input').value);toast('✅ บันทึก URL แล้ว')">บันทึก URL</button>
+    </div>
+    <div style="display:flex;gap:8px;flex-wrap:wrap">
+      <button class="btn" id="gs-sync-btn"
+        style="height:36px;background:var(--blue);color:#fff;border:none;padding:0 16px;font-size:12px"
+        onclick="gsSyncAll()">☁ Sync → Sheets</button>
+      <button class="btn btn-ghost" id="gs-restore-btn"
+        style="height:36px;padding:0 16px;font-size:12px"
+        onclick="gsRestoreAll()">☁ Load ← Sheets</button>
+    </div>
+    <div id="gs-status" style="font-size:11px;color:var(--fg3);font-family:var(--mono);margin-top:.5rem"></div>
+  </div>
+  <div id="storage-body"></div>
   </div>
 
   <!-- ════════════════ PHASE 1 ════════════════ -->
@@ -3111,6 +3131,86 @@ const SK = {
 const MAX_STORED = 4;
 
 // ── Generic load/save helpers ──────────────────────────────────────
+// ════════════════ GOOGLE SHEETS SYNC ════════════════════
+let GS_URL = localStorage.getItem('gs_url') || '';
+
+function gsSetUrl(url){
+  GS_URL = url.trim();
+  localStorage.setItem('gs_url', GS_URL);
+}
+
+async function gsSave(key, data){
+  if(!GS_URL) return false;
+  try{
+    const resp = await fetch(GS_URL, {
+      method:'POST', mode:'no-cors',
+      headers:{'Content-Type':'application/json'},
+      body: JSON.stringify({key, data: JSON.stringify(data)})
+    });
+    return true;
+  }catch(e){ console.warn('gsSave error:', e); return false; }
+}
+
+async function gsLoad(key){
+  if(!GS_URL) return null;
+  try{
+    const resp = await fetch(`${GS_URL}?key=${key}`);
+    const json = await resp.json();
+    if(json.data) return JSON.parse(json.data);
+    return null;
+  }catch(e){ console.warn('gsLoad error:', e); return null; }
+}
+
+async function gsSyncAll(){
+  if(!GS_URL){ toast('⚠ ยังไม่ได้ตั้งค่า Google Sheets URL'); return; }
+  const btn = $('gs-sync-btn');
+  if(btn){ btn.disabled=true; btn.textContent='⏳ กำลัง Sync...'; }
+  toast('📤 กำลัง Sync ข้อมูลไปยัง Google Sheets...');
+  try{
+    const tasks = [];
+    // P1 rows
+    const p1raw = (() => { try{ return localStorage.getItem(SK.p1); }catch(e){return null;} })();
+    if(p1raw) tasks.push(gsSave('p1_rows', p1raw));
+    // P1 MoM
+    const momraw = localStorage.getItem(SK_MOM);
+    if(momraw) tasks.push(gsSave('p1_mom', momraw));
+    // P2
+    const p2raw = localStorage.getItem(SK.p2);
+    if(p2raw) tasks.push(gsSave('p2', p2raw));
+    // P3
+    const p3raw = localStorage.getItem(SK.p3);
+    if(p3raw) tasks.push(gsSave('p3', p3raw));
+
+    await Promise.all(tasks);
+    toast('✅ Sync สำเร็จ — ข้อมูลอยู่ใน Google Sheets แล้ว');
+  }catch(e){
+    toast('❌ Sync ล้มเหลว: ' + e.message);
+  }
+  if(btn){ btn.disabled=false; btn.textContent='☁ Sync → Sheets'; }
+}
+
+async function gsRestoreAll(){
+  if(!GS_URL){ toast('⚠ ยังไม่ได้ตั้งค่า Google Sheets URL'); return; }
+  const btn = $('gs-restore-btn');
+  if(btn){ btn.disabled=true; btn.textContent='⏳ กำลังโหลด...'; }
+  toast('📥 กำลังโหลดข้อมูลจาก Google Sheets...');
+  try{
+    const [p1rows, p1mom, p2, p3] = await Promise.all([
+      gsLoad('p1_rows'), gsLoad('p1_mom'), gsLoad('p2'), gsLoad('p3')
+    ]);
+    let count = 0;
+    if(p1rows){ localStorage.setItem(SK.p1, typeof p1rows==='string'?p1rows:JSON.stringify(p1rows)); count++; }
+    if(p1mom){  localStorage.setItem(SK_MOM, typeof p1mom==='string'?p1mom:JSON.stringify(p1mom)); count++; }
+    if(p2){     localStorage.setItem(SK.p2, typeof p2==='string'?p2:JSON.stringify(p2)); count++; }
+    if(p3){     localStorage.setItem(SK.p3, typeof p3==='string'?p3:JSON.stringify(p3)); count++; }
+    toast(`✅ โหลดจาก Google Sheets สำเร็จ (${count} keys) — กำลัง Restore...`);
+    setTimeout(()=>{ stRestoreAll(); renderStorage(); }, 500);
+  }catch(e){
+    toast('❌ โหลดล้มเหลว: ' + e.message);
+  }
+  if(btn){ btn.disabled=false; btn.textContent='☁ Load ← Sheets'; }
+}
+
 function stLoad(key){ try{ return JSON.parse(localStorage.getItem(key)||'[]'); }catch(e){ return []; } }
 function stSave(key, data){
   try{
@@ -3848,6 +3948,9 @@ function smSetStatus(type, msg){
 
 // ── Startup: restore all saved data ──────────────────────────────
 stRestoreAll();
+// auto-fill Google Sheets URL if saved
+const _gsEl = $('gs-url-input');
+if(_gsEl && GS_URL) _gsEl.value = GS_URL;
 </script>
 </body>
 </html>
