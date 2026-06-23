@@ -2387,7 +2387,7 @@ async function parseAppleP3(file){
         const iType    = hdr.findIndex(h=>h.includes('content type'));
         const iAppleId = hdr.findIndex(h=>h.includes('apple id'));
         const iUnits   = hdr.findIndex(h=>h==='units');
-        const iPrev    = hdr.findIndex(h=>h.includes('previous week'));
+        const iPrev    = hdr.findIndex(h=>h.includes('previous'));
 
         const rows = [];
         let manualTotal = null;
