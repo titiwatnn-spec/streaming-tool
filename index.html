@@ -7,6 +7,7 @@
 <link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;600&family=Noto+Sans+Thai:wght@400;600;700;800&display=swap" rel="stylesheet">
 <script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/Chart.js/4.4.1/chart.umd.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/pptxgenjs@3.12.0/dist/pptxgen.bundle.js"></script>
 <style>
 :root{
   --bg:#f4f6fa; --bg2:#ffffff; --bg3:#f0f2f7;
@@ -480,7 +481,13 @@ td.src{text-align:center;width:110px} td.art{color:var(--fg2)}
 
   <!-- ════════════════ OVERVIEW ════════════════ -->
   <div id="p0" style="display:none">
-    <div class="tab-desc">ภาพรวมสรุปข้อมูลทุก Phase — กรอกข้อมูลให้ครบทุก Phase เพื่อดูผลรวม</div>
+    <div class="tab-desc" style="display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:8px">
+      <span>ภาพรวมสรุปข้อมูลทุก section — กรอกข้อมูลให้ครบทุก section เพื่อดูผลรวม</span>
+      <button class="btn" id="ov-pptx-btn" onclick="exportPPTX()"
+        style="height:34px;background:var(--violet);color:#fff;border:none;padding:0 16px;font-size:12px;border-radius:8px;font-weight:600;display:flex;align-items:center;gap:6px;cursor:pointer">
+        📊 Export PPTX
+      </button>
+    </div>
     <div id="ov-body"></div>
   </div>
 
@@ -4039,6 +4046,222 @@ function smSetStatus(type, msg){
   el.style.display = 'block';
   el.style.whiteSpace = 'pre-line';
   el.textContent = msg;
+}
+
+// ════════════════ EXPORT PPTX ════════════════════════════════
+async function exportPPTX(){
+  const btn = $('ov-pptx-btn');
+  if(btn){ btn.disabled=true; btn.textContent='⏳ กำลังสร้าง...'; }
+  toast('📊 กำลังสร้าง PPTX...');
+
+  try{
+    const pres = new PptxGenJS();
+    pres.layout = 'LAYOUT_WIDE';
+    pres.title  = 'Streaming Report';
+
+    // ── Colors ──────────────────────────────────────────────
+    const C = {
+      white:'FFFFFF', bg:'F8FAFB', blue:'1E90C8', teal:'0D9488',
+      orange:'F97316', red:'DC2626', green:'16A34A', gray:'64748B',
+      dark:'1E293B', hdrBg:'1E6FA0', rowAlt:'F0F7FD', totalBg:'FEF3C7',
+    };
+    const fmt = n => parseInt(n||0).toLocaleString('en-US');
+    const pctColor = v => {
+      if(!v||v==='NEW'||v==='GONE'||v==='—') return C.blue;
+      return parseFloat(String(v).replace('%',''))>=0 ? C.green : C.red;
+    };
+    const fmtPct = v => {
+      if(!v||v==='NEW'||v==='GONE'||v==='—') return v||'—';
+      const n=parseFloat(String(v).replace('%',''));
+      return (n>=0?'+':'')+n.toFixed(2)+'%';
+    };
+
+    function addBg(slide){
+      slide.background = { color: C.white };
+      slide.addShape(pres.shapes.OVAL,{x:10.5,y:-1.8,w:4.5,h:4.5,line:{color:'8ECDCC',width:18},fill:{type:'none'}});
+      slide.addShape(pres.shapes.OVAL,{x:11.2,y:-0.8,w:3.5,h:3.5,line:{color:'B2E0DF',width:14},fill:{type:'none'}});
+      slide.addShape(pres.shapes.OVAL,{x:-1.8,y:5.5,w:4.0,h:4.0,line:{color:'8ECDCC',width:16},fill:{type:'none'}});
+      slide.addText([{text:'S1',options:{bold:true,fontSize:16,color:C.blue}},{text:'\nMUSIC',options:{fontSize:8,color:C.blue,bold:true,charSpacing:3}}],
+        {x:12.2,y:6.8,w:1.0,h:0.65,align:'center',margin:0});
+    }
+
+    function hdrRow(cols, widths){
+      return [cols.map((t,i)=>({text:t,options:{fill:{color:C.hdrBg},color:C.white,bold:true,fontSize:10,align:i>2?'right':'left'}}))];
+    }
+
+    // ── SLIDE 1: Top Stream WW Table (Phase 2) ───────────────
+    if(p2_data && p2_data.length && p2WeekData && p2WeekData.length>=2){
+      const s1 = pres.addSlide(); addBg(s1);
+      const prevWD = p2WeekData[p2WeekData.length-2];
+      const latWD  = p2WeekData[p2WeekData.length-1];
+      const prevLbl = prevWD.label; const latLbl = latWD.label;
+
+      s1.addText('Top Stream Apple Music S-One',{x:1.5,y:0.25,w:10,h:0.5,fontSize:15,bold:true,color:C.dark,align:'center'});
+
+      let totalPrev=0, totalLat=0;
+      const rows = p2_data.map((r,i)=>{
+        const prev = prevWD.songMap.get(r._key)?.streams||0;
+        const lat  = latWD.songMap.get(r._key)?.streams||0;
+        totalPrev+=prev; totalLat+=lat;
+        const diff=lat-prev;
+        const pct = prev>0?((diff/prev)*100).toFixed(2)+'%':'NEW';
+        const fill={color:i%2===0?C.white:C.rowAlt};
+        return [
+          {text:String(i+1),options:{fill,align:'center',fontSize:9,color:C.gray}},
+          {text:r.name||'',options:{fill,fontSize:9,color:C.dark}},
+          {text:r.artist||'',options:{fill,fontSize:9,color:C.gray}},
+          {text:fmt(prev),options:{fill,align:'right',fontSize:9,color:C.gray}},
+          {text:fmt(lat), options:{fill,align:'right',fontSize:9,bold:true,color:C.dark}},
+          {text:(diff>=0?'-':'-')+fmt(Math.abs(diff)),options:{fill,align:'right',fontSize:9,color:diff>=0?C.green:C.red}},
+          {text:fmtPct(pct),options:{fill,align:'right',fontSize:9,bold:true,color:pctColor(pct)}},
+        ];
+      });
+      const td=totalLat-totalPrev; const tp=totalPrev>0?((td/totalPrev)*100).toFixed(2)+'%':'—';
+      const totRow=[['',' ',' ',fmt(totalPrev),fmt(totalLat),(td>=0?'-':'-')+fmt(Math.abs(td)),fmtPct(tp)].map((t,i)=>
+        ({text:t,options:{fill:{color:C.totalBg},align:i>2?'right':'left',bold:true,fontSize:9,color:i===6?pctColor(tp):C.dark}}))];
+
+      s1.addTable([...hdrRow(['No','Name','Artist',prevLbl,latLbl,'Change','% Change']),...rows,...totRow],{
+        x:0.35,y:0.85,w:12.5,colW:[0.5,4.0,2.5,1.5,1.6,1.2,1.2],
+        border:{type:'solid',pt:0.3,color:'DDDDDD'},rowH:0.25,
+      });
+    }
+
+    // ── SLIDE 2: Stream WoW 2-bar chart ─────────────────────
+    if(p2WeekData && p2WeekData.length>=2){
+      const s2 = pres.addSlide(); addBg(s2);
+      const prevWD=p2WeekData[p2WeekData.length-2], latWD=p2WeekData[p2WeekData.length-1];
+      const prevT=prevWD.grandTotal||0, latT=latWD.grandTotal||0;
+      const diff=latT-prevT, pct=prevT>0?((diff/prevT)*100):0;
+
+      s2.addText('Stream Apple Music S-One',{x:1.5,y:0.25,w:10,h:0.5,fontSize:15,bold:true,color:C.dark,align:'center'});
+      s2.addChart(pres.charts.BAR,[{name:'Streams',labels:[prevWD.label,latWD.label],values:[prevT,latT]}],{
+        x:2.5,y:0.85,w:7.5,h:4.6,barDir:'col',chartColors:[C.blue],
+        chartArea:{fill:{color:C.white}},catAxisFontSize:11,valAxisFontSize:9,
+        showLegend:false,showValue:true,dataLabelFontSize:13,dataLabelBold:true,dataLabelPosition:'outEnd',
+      });
+      s2.addTable([
+        [{text:'Day',options:{fill:{color:C.totalBg},bold:true,fontSize:10}},
+         {text:prevWD.label,options:{fill:{color:C.totalBg},bold:true,align:'center',fontSize:10}},
+         {text:latWD.label,options:{fill:{color:C.totalBg},bold:true,align:'center',fontSize:10}},
+         {text:'Streams Change',options:{fill:{color:C.totalBg},bold:true,align:'center',fontSize:10}},
+         {text:'% Change',options:{fill:{color:C.totalBg},bold:true,align:'center',fontSize:10}}],
+        [{text:'Streams',options:{fill:{color:C.white},bold:true,fontSize:10}},
+         {text:fmt(prevT),options:{fill:{color:C.white},align:'right',fontSize:10}},
+         {text:fmt(latT), options:{fill:{color:C.white},align:'right',fontSize:10}},
+         {text:(diff>=0?'+ ':'- ')+fmt(Math.abs(diff)),options:{fill:{color:C.white},align:'right',fontSize:10,color:diff>=0?C.green:C.red}},
+         {text:(pct>=0?'+':'')+pct.toFixed(2)+'%',options:{fill:{color:C.white},align:'right',bold:true,fontSize:11,color:pct>=0?C.green:C.red}}],
+      ],{x:2.5,y:5.9,w:8.3,colW:[1.5,2.0,2.0,1.8,1.0],border:{type:'solid',pt:0.5,color:'DDDDDD'},rowH:0.3});
+    }
+
+    // ── SLIDE 3: MoM Streams Apple+Virgin ───────────────────
+    const momArr = p1MoMLoad();
+    if(momArr && momArr.length){
+      const s3 = pres.addSlide(); addBg(s3);
+      s3.addText('Streams Apple Music S-One — รายเดือน',{x:1.5,y:0.25,w:10,h:0.5,fontSize:15,bold:true,color:C.dark,align:'center'});
+      const labels=momArr.map(m=>m.label);
+      const appleV=momArr.map(m=>m.apple||0);
+      const virginV=momArr.map(m=>m.virgin||0);
+      const totals=momArr.map(m=>(m.apple||0)+(m.virgin||0));
+      s3.addChart(pres.charts.BAR,[
+        {name:'🍎 Apple', labels,values:appleV},
+        {name:'🟢 Virgin',labels,values:virginV},
+      ],{x:1.8,y:0.85,w:9.5,h:4.6,barDir:'col',barGrouping:'stacked',
+        chartColors:['4472C4',C.orange],chartArea:{fill:{color:C.white}},
+        catAxisFontSize:9,valAxisFontSize:8,showLegend:true,legendPos:'b',legendFontSize:10});
+      const colW=labels.length<=6?[1.5,...labels.map(()=>1.8),1.6]:[1.2,...labels.map(()=>1.5),1.3];
+      s3.addTable([
+        [{text:'',options:{fill:{color:C.totalBg},bold:true,fontSize:9}},
+         ...labels.map(l=>({text:l,options:{fill:{color:C.totalBg},bold:true,align:'center',fontSize:9}})),
+         {text:'Total',options:{fill:{color:C.totalBg},bold:true,align:'center',fontSize:9}}],
+        [{text:'Streams',options:{fill:{color:C.white},bold:true,fontSize:9}},
+         ...totals.map(t=>({text:fmt(t),options:{fill:{color:C.white},align:'right',fontSize:9}})),
+         {text:fmt(totals.reduce((a,b)=>a+b,0)),options:{fill:{color:C.white},align:'right',bold:true,fontSize:9}}],
+      ],{x:0.5,y:5.75,w:12.3,colW,border:{type:'solid',pt:0.3,color:'DDDDDD'},rowH:0.28});
+    }
+
+    // ── SLIDE 4 & 5: Top Download Ringtone + Song ────────────
+    const latP3 = p3WeekData && p3WeekData.length ? p3WeekData[p3WeekData.length-1] : null;
+    if(latP3 && latP3.rows){
+      const prevP3 = p3WeekData.length>=2 ? p3WeekData[p3WeekData.length-2] : null;
+      const prevMap = new Map((prevP3?.rows||[]).map(r=>[r.appleId||r.name, r.units]));
+
+      for(const [type, title, slideLabel] of [
+        ['Ringtone','Top Download Ringtone iTunes S-One','🔔'],
+        ['Song','Top Download Song iTunes S-One','🎵'],
+      ]){
+        const rows20 = latP3.rows.filter(r=>r.type===type).slice(0,20);
+        if(!rows20.length) continue;
+        const sN = pres.addSlide(); addBg(sN);
+        sN.addText(title,{x:1.5,y:0.25,w:10,h:0.5,fontSize:15,bold:true,color:C.dark,align:'center'});
+
+        let tCurr=0, tPrev=0;
+        const tblRows = rows20.map((r,i)=>{
+          const curr=r.units||0; const prev=prevMap.get(r.appleId||r.name)||0;
+          tCurr+=curr; tPrev+=prev;
+          const diff=curr-prev;
+          const pct=prev>0?((diff/prev)*100).toFixed(2)+'%':'NEW';
+          const fill={color:i%2===0?C.white:C.rowAlt};
+          return [
+            {text:String(i+1),options:{fill,align:'center',fontSize:9,color:C.gray}},
+            {text:r.name||'',options:{fill,fontSize:9,color:C.dark}},
+            {text:r.artist||'',options:{fill,fontSize:9,color:C.gray}},
+            {text:type,options:{fill,align:'center',fontSize:9,color:type==='Ringtone'?C.blue:C.teal}},
+            {text:prev||prev===0?fmt(prev):'-',options:{fill,align:'right',fontSize:9,color:C.gray}},
+            {text:fmt(curr),options:{fill,align:'right',fontSize:9,bold:true,color:C.dark}},
+            {text:prev>0?(diff>=0?'+':'')+fmt(diff):'-',options:{fill,align:'right',fontSize:9,color:diff>=0?C.green:C.red}},
+            {text:fmtPct(pct),options:{fill,align:'right',fontSize:9,bold:true,color:pctColor(pct)}},
+          ];
+        });
+        const td2=tCurr-tPrev;
+        const totRow2=[['',' ',' ',' ',fmt(tPrev),fmt(tCurr),fmt(td2),tPrev>0?((td2/tPrev)*100).toFixed(2)+'%':'—'].map((t,i)=>
+          ({text:t,options:{fill:{color:C.totalBg},align:i>3?'right':'left',bold:true,fontSize:9}}))];
+        sN.addTable([...hdrRow(['No','Name','Artist','Type','Prev WW','Curr WW','Change','% Chg']),...tblRows,...totRow2],{
+          x:0.35,y:0.85,w:12.5,colW:[0.5,3.8,2.5,1.2,1.2,1.2,1.0,1.1],
+          border:{type:'solid',pt:0.3,color:'DDDDDD'},rowH:0.24,
+        });
+      }
+
+      // ── SLIDE 6: Download WoW Bar Chart ─────────────────
+      const s6 = pres.addSlide(); addBg(s6);
+      s6.addText('Download iTunes S-One',{x:1.5,y:0.25,w:10,h:0.5,fontSize:15,bold:true,color:C.dark,align:'center'});
+      const rtRows = latP3.rows.filter(r=>r.type==='Ringtone').slice(0,10);
+      const dlLabels=rtRows.map(r=>r.name.length>14?r.name.slice(0,14)+'…':r.name);
+      const dlPrev=rtRows.map(r=>prevMap.get(r.appleId||r.name)||0);
+      const dlCurr=rtRows.map(r=>r.units||0);
+      const tDP=dlPrev.reduce((a,b)=>a+b,0), tDC=dlCurr.reduce((a,b)=>a+b,0);
+      s6.addChart(pres.charts.BAR,[
+        {name:'Previous WW',labels:dlLabels,values:dlPrev},
+        {name:'Current WW', labels:dlLabels,values:dlCurr},
+      ],{x:1.4,y:0.85,w:10.5,h:4.6,barDir:'col',barGrouping:'clustered',
+        chartColors:['A8D8EA',C.blue],chartArea:{fill:{color:C.white}},
+        catAxisFontSize:7,valAxisFontSize:8,showLegend:true,legendPos:'b',
+        showValue:true,dataLabelFontSize:8,dataLabelPosition:'outEnd'});
+      const tDiff=tDC-tDP;
+      s6.addTable([
+        [{text:'Day',options:{fill:{color:C.totalBg},bold:true,fontSize:10}},
+         {text:'Prev WW',options:{fill:{color:C.totalBg},bold:true,align:'center',fontSize:10}},
+         {text:'Curr WW',options:{fill:{color:C.totalBg},bold:true,align:'center',fontSize:10}},
+         {text:'Unit Change',options:{fill:{color:C.totalBg},bold:true,align:'center',fontSize:10}},
+         {text:'% Change',options:{fill:{color:C.totalBg},bold:true,align:'center',fontSize:10}}],
+        [{text:'Downloads',options:{fill:{color:C.white},bold:true,fontSize:10}},
+         {text:fmt(tDP),options:{fill:{color:C.white},align:'right',fontSize:10}},
+         {text:fmt(tDC),options:{fill:{color:C.white},align:'right',fontSize:10}},
+         {text:(tDiff>=0?'+ ':'- ')+fmt(Math.abs(tDiff)),options:{fill:{color:C.white},align:'right',fontSize:10,color:tDiff>=0?C.green:C.red}},
+         {text:tDP>0?((tDiff/tDP)*100).toFixed(2)+'%':'—',options:{fill:{color:C.white},align:'right',bold:true,fontSize:10,color:tDiff>=0?C.green:C.red}}],
+      ],{x:3.0,y:6.05,w:7.0,colW:[1.8,1.5,1.5,1.5,0.7],border:{type:'solid',pt:0.5,color:'DDDDDD'},rowH:0.28});
+    }
+
+    // ── Download ─────────────────────────────────────────────
+    const today = new Date();
+    const fname = `Streaming_Report_${today.getFullYear()}-${String(today.getMonth()+1).padStart(2,'0')}-${String(today.getDate()).padStart(2,'0')}.pptx`;
+    await pres.writeFile({fileName: fname});
+    toast(`✅ Export ${fname} สำเร็จ`);
+  } catch(err){
+    console.error('exportPPTX error:', err);
+    toast('❌ Export ล้มเหลว: '+err.message);
+  } finally {
+    if(btn){ btn.disabled=false; btn.textContent='📊 Export PPTX'; }
+  }
 }
 
 // ── Startup: restore all saved data ──────────────────────────────
