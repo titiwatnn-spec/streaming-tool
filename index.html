@@ -2390,15 +2390,26 @@ async function parseAppleP3(file){
         const iPrev    = hdr.findIndex(h=>h.includes('previous week'));
 
         const rows = [];
-        let manualTotal = null;   // แถว Total ที่กรอกเอง
+        let manualTotal = null;
 
         for(let i=hdrIdx+1;i<raw.length;i++){
           const r = raw[i];
-          // ตรวจ Total row: col iAppleId = "total"
-          const appleIdCell = String(r[iAppleId]||'').trim().toLowerCase();
-          if(appleIdCell === 'total'){
+          // ตรวจ Total row: มี cell ที่เป็น 'total' (any case, any col)
+          const totalCell = r.find(v=>v&&typeof v==='string'&&v.trim().toLowerCase()==='total');
+          if(totalCell){
+            // อ่านค่าจาก Units column โดยตรง
             const tv = parseFloat(String(r[iUnits]||0).replace(/[^0-9.-]/g,''));
-            if(tv > 0) manualTotal = tv;
+            // ถ้า Units col ว่าง ลองหาตัวเลขแรกหลัง total cell
+            if(tv>0){
+              manualTotal = tv;
+            } else {
+              // total อาจอยู่ col ถัดจาก 'total' string (เช่น Jun 15-21)
+              const tIdx = r.indexOf(totalCell);
+              for(let j=tIdx+1;j<r.length;j++){
+                const n=parseFloat(String(r[j]||'').replace(/[^0-9.-]/g,''));
+                if(n>0){ manualTotal=n; break; }
+              }
+            }
             continue;
           }
           const name = String(r[iName]||'').trim();
@@ -2411,7 +2422,10 @@ async function parseAppleP3(file){
           if(units>0||prevUnits>0) rows.push({appleId,name,artist,type,units,prevUnits});
         }
         const dateLabel = String((raw[0]||[])[1]||'').trim();
-        resolve({rows, dateLabel, manualTotal});
+        // ใช้ manualTotal (Apple website total) ถ้ามี ไม่งั้น sum rows
+        const rowsSum = rows.reduce((s,r)=>s+r.units,0);
+        const total = (manualTotal && manualTotal>0) ? manualTotal : rowsSum;
+        resolve({rows, dateLabel, manualTotal: total});
       }catch(err){ reject(err); }
     };
     reader.onerror = () => reject(new Error('อ่านไฟล์ไม่ได้'));
