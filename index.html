@@ -604,6 +604,8 @@ td.src{text-align:center;width:110px} td.art{color:var(--fg2)}
                 <option value="change_asc">เรียงตาม % ลดมากสุด</option>
                 <option value="rank">เรียงตาม Rank</option>
               </select>
+              <button class="btn btn-dl" style="height:32px;font-size:11px;padding:0 14px"
+                onclick="p1ExportCompare()">⬇ Export CSV</button>
             </div>
             <div id="mom-compare-kpis" style="margin-bottom:.75rem"></div>
             <div id="mom-compare-table" style="overflow-x:auto"></div>
@@ -1575,6 +1577,80 @@ function p1RenderCompare(){
   if(rows.length===0) html='<div style="padding:1rem;text-align:center;font-size:12px;color:var(--fg3)">ไม่พบเพลงที่ตรงกับการค้นหา</div>';
   tblEl.innerHTML=html;
 }
+// ── MoM Compare Export CSV ──────────────────────────────────────
+function p1ExportCompare(){
+  const arr     = p1MoMLoad();
+  const baseL   = ($('mom-cmp-base')||{value:''}).value;
+  const targetL = ($('mom-cmp-target')||{value:''}).value;
+  const sort    = ($('mom-cmp-sort')||{value:'streams_desc'}).value;
+  const baseM   = arr.find(m=>m.label===baseL);
+  const targetM = arr.find(m=>m.label===targetL);
+  if(!baseM||!targetM||!baseM.rows||!targetM.rows){
+    toast('⚠ ไม่มีข้อมูล Compare — กรุณาบันทึก MoM พร้อม rows ก่อน');
+    return;
+  }
+
+  const mkKey = (name,artist) => (name||'').toLowerCase()+'|'+(artist||'').toLowerCase();
+  const baseMap   = new Map(baseM.rows.map(r=>[mkKey(r.name,r.artist),r]));
+  const targetMap = new Map(targetM.rows.map(r=>[mkKey(r.name,r.artist),r]));
+  const allKeys   = new Set([...baseMap.keys(),...targetMap.keys()]);
+
+  let rows = [...allKeys].map(k=>{
+    const b = baseMap.get(k);
+    const t = targetMap.get(k);
+    const name   = (t||b).name;
+    const artist = (t||b).artist;
+    const source = (t||b).source||'';
+    const bS = b?.streams||0;
+    const tS = t?.streams||0;
+    const diff = tS - bS;
+    const pct  = bS>0 ? (diff/bS*100) : null;
+    const status = !b?'NEW':!t?'GONE':'';
+    return {name, artist, source, bS, tS, diff, pct, status};
+  });
+
+  if(sort==='streams_desc') rows.sort((a,b)=>b.tS-a.tS);
+  else if(sort==='change_desc') rows.sort((a,b)=>(b.pct??-999)-(a.pct??-999));
+  else if(sort==='change_asc')  rows.sort((a,b)=>(a.pct??999)-(b.pct??999));
+  else rows.sort((a,b)=>b.tS-a.tS);
+
+  const hdr = [
+    'เพลง','ศิลปิน','แหล่งข้อมูล',
+    `Streams (${baseL})`,`Streams (${targetL})`,
+    'Diff','% Change','สถานะ'
+  ];
+  const lines = ['\uFEFF'+hdr.join(',')];
+  rows.forEach(r=>{
+    const pctStr = r.status==='NEW'?'NEW'
+      :r.status==='GONE'?'GONE'
+      :r.pct!==null?(r.pct>=0?'+':'')+r.pct.toFixed(2)+'%':'—';
+    lines.push([
+      `"${(r.name||'').replace(/"/g,'""')}"`,
+      `"${(r.artist||'').replace(/"/g,'""')}"`,
+      r.source||'',
+      r.bS, r.tS,
+      r.bS>0||r.tS>0?r.diff:'',
+      pctStr,
+      r.status||''
+    ].join(','));
+  });
+
+  // summary section
+  lines.push('');
+  lines.push(['"สรุป"','','','','','','',''].join(','));
+  lines.push([`"Total (${baseL})"`, '','',baseM.total||0,'','','',''].join(','));
+  lines.push([`"Total (${targetL})"`, '','',targetM.total||0,'','','',''].join(','));
+  const totalDiff = (targetM.total||0)-(baseM.total||0);
+  const totalPct  = (baseM.total||0)>0?((totalDiff/(baseM.total||1))*100).toFixed(2)+'%':'—';
+  lines.push(['"Total Change"','','',totalDiff,'','',totalPct,''].join(','));
+  lines.push(['"เพลงใหม่ (NEW)"','','',rows.filter(r=>r.status==='NEW').length,'','','',''].join(','));
+  lines.push(['"เพลงหาย (GONE)"','','',rows.filter(r=>r.status==='GONE').length,'','','',''].join(','));
+
+  const fname = `mom_compare_${baseL.replace(/\s/g,'_')}_vs_${targetL.replace(/\s/g,'_')}.csv`;
+  triggerDL(URL.createObjectURL(new Blob([lines.join('\n')],{type:'text/csv;charset=utf-8;'})), fname);
+  toast(`⬇ Export ${rows.length.toLocaleString()} เพลง · ${baseL} vs ${targetL}`);
+}
+
 async function p1AIInsight(){
   const arr = p1MoMLoad();
   if(arr.length<2){ toast('⚠ ต้องมีอย่างน้อย 2 เดือนเพื่อวิเคราะห์'); return; }
