@@ -472,9 +472,9 @@ td.src{text-align:center;width:110px} td.art{color:var(--fg2)}
 
   <div class="tabs">
     <button class="tab" id="tab0" onclick="switchTab(0)">📊 Overview</button>
-    <button class="tab active" id="tab1" onclick="switchTab(1)">Phase 1 — รายงานรวม</button>
-    <button class="tab" id="tab2" onclick="switchTab(2)">Phase 2 — WW Streams</button>
-    <button class="tab" id="tab3" onclick="switchTab(3)">Phase 3 — Ringtone &amp; Song</button>
+    <button class="tab active" id="tab1" onclick="switchTab(1)">รายงานรวม</button>
+    <button class="tab" id="tab2" onclick="switchTab(2)">WW Streams</button>
+    <button class="tab" id="tab3" onclick="switchTab(3)">Ringtone &amp; Song</button>
     <button class="tab" id="tab5" onclick="switchTab(5)" style="margin-left:auto">🗄 Storage</button>
   </div>
 
@@ -845,7 +845,7 @@ td.src{text-align:center;width:110px} td.art{color:var(--fg2)}
 <div id="sheetsOverlay" class="sheets-overlay" style="display:none" onclick="if(event.target===this)closeSheetsModal()">
   <div class="sheets-modal">
     <h3>📤 บันทึกลง Google Sheets</h3>
-    <div class="smSub">ข้อมูล Phase 4 ทุกสัปดาห์จะถูก append ลง Spreadsheet อัตโนมัติ</div>
+    <div class="smSub">ข้อมูล WW Top Chart ทุกสัปดาห์จะถูก append ลง Spreadsheet อัตโนมัติ</div>
 
     <div class="smHint">
       ยังไม่มี Web App URL?
@@ -1469,7 +1469,7 @@ function p1RenderCompare(){
   const kpiEl  = $('mom-compare-kpis');
   const tblEl  = $('mom-compare-table');
 
-  if(!baseM||!targetM){ kpiEl.innerHTML=''; tblEl.innerHTML=`<div style="padding:1rem;font-size:12px;color:var(--fg3);font-family:var(--mono)">⚠ กรุณาบันทึก MoM พร้อม rows ก่อน (กด 📅 บันทึก MoM ขณะที่มีข้อมูล Phase 1)</div>`; return; }
+  if(!baseM||!targetM){ kpiEl.innerHTML=''; tblEl.innerHTML=`<div style="padding:1rem;font-size:12px;color:var(--fg3);font-family:var(--mono)">⚠ กรุณาบันทึก MoM พร้อม rows ก่อน (กด 📅 บันทึก MoM ขณะที่มีข้อมูล)</div>`; return; }
 
   if(!baseM.rows||!targetM.rows){ tblEl.innerHTML=`<div style="padding:1rem;font-size:12px;color:var(--fg3);font-family:var(--mono)">⚠ ข้อมูลเดือนที่เลือกไม่มี song-level data (บันทึกก่อนอัปเดต feature นี้)</div>`; return; }
 
@@ -3490,23 +3490,23 @@ function renderStorage(){
   </div>`;
 
   // P1 Top 100
-  html += stPhaseBlock('Phase 1 — Top 100 (ล่าสุด)','#64748b', p1raw, 'p1',
+  html += stPhaseBlock('Top 100 (ล่าสุด)','#64748b', p1raw, 'p1',
     r=>`${(r.rows||[]).length.toLocaleString()} รายการ · 🍎 ${fmtK(r.apple||0)} · 🟢 ${fmtK(r.virgin||0)}`);
 
   // MoM
-  html += stPhaseBlock('Phase 1 — MoM Streaming (12 เดือน)','#0891b2', momarr, 'mom',
+  html += stPhaseBlock('MoM Streaming (12 เดือน)','#0891b2', momarr, 'mom',
     r=>`🍎 ${fmtK(r.apple)} · 🟢 ${fmtK(r.virgin)} · Σ ${fmtK(r.total)}`);
 
   // Phase 2
-  html += stPhaseBlock('Phase 2 — WW Summary','#2563eb', p2arr, 'p2',
+  html += stPhaseBlock('WW Summary','#2563eb', p2arr, 'p2',
     r=>`${r.songCount||'?'} รายการ`);
 
   // Phase 3
-  html += stPhaseBlock('Phase 3 — Ringtone &amp; Song','#db2777', p3arr, 'p3',
+  html += stPhaseBlock('Ringtone &amp; Song','#db2777', p3arr, 'p3',
     r=>`${r.rowCount||'?'} รายการ`);
 
   // Phase 4
-  html += stPhaseBlock('Phase 4 — WW Top Chart 20','#0891b2', p4arr, 'p4',
+  html += stPhaseBlock('WW Top Chart 20','#0891b2', p4arr, 'p4',
     r=>`Apple ${fmt(r.appleS)} · Virgin ${fmt(r.virginS)} · รวม ${fmt(r.total)}`);
 
   if(total === 0){
@@ -3781,7 +3781,7 @@ function renderOverview(){
   const p4done=p4_results&&p4_results.length>0;
 
   if(!p1done&&!p2done&&!p3done&&!p4done){
-    body.innerHTML='<div class="ov-empty" style="padding:4rem">ยังไม่มีข้อมูล — กรุณากรอกข้อมูลใน Phase 1–4 ก่อน</div>';
+    body.innerHTML='<div class="ov-empty" style="padding:4rem">ยังไม่มีข้อมูล — กรุณากรอกข้อมูลใน ทุก section ก่อน</div>';
     return;
   }
 
@@ -3795,7 +3795,7 @@ function renderOverview(){
     const vTotal = p1.vTotal || p1.rows.filter(r=>r.source==='virgin'||r.source==='Apple+Virgin').reduce((s,r)=>s+r.streams,0);
     const top5=p1.rows.slice(0,5);
     html+=`<div class="ov-section">
-      <div class="ov-sec-title"><span class="ov-phase-badge" style="background:rgba(37,99,235,.1);color:var(--blue);border:1px solid rgba(37,99,235,.2)">Phase 1</span>รายงานรวม Apple + Virgin</div>
+      <div class="ov-sec-title"><span class="ov-phase-badge" style="background:rgba(37,99,235,.1);color:var(--blue);border:1px solid rgba(37,99,235,.2)">รายงานรวม</span>รายงานรวม Apple + Virgin</div>
       <div class="ov-grid">
         <div class="ov-kpi"><div class="lbl">Grand Total</div><div class="val" style="color:var(--fg)">${fmt(total)}</div><div class="sub">${p1.rows.length.toLocaleString()} รายการ</div></div>
         <div class="ov-kpi"><div class="lbl">Apple</div><div class="val" style="color:var(--blue)">${fmt(aTotal)}</div><div class="sub">${p1.rows.filter(r=>r.source==='apple').length} เพลง</div></div>
@@ -3811,7 +3811,7 @@ function renderOverview(){
     const top5=p2Data.slice(0,5);
     const currTotal=p2Data.reduce((s,r)=>s+r.streams,0);
     html+=`<div class="ov-section">
-      <div class="ov-sec-title"><span class="ov-phase-badge" style="background:rgba(8,145,178,.1);color:var(--teal);border:1px solid rgba(8,145,178,.2)">Phase 2</span>WW Summary</div>
+      <div class="ov-sec-title"><span class="ov-phase-badge" style="background:rgba(8,145,178,.1);color:var(--teal);border:1px solid rgba(8,145,178,.2)">WW Streams</span>WW Summary</div>
       <div class="ov-grid">
         <div class="ov-kpi"><div class="lbl">Top 20 Total (ปัจจุบัน)</div><div class="val" style="color:var(--teal)">${fmt(currTotal)}</div><div class="sub">20 เพลง</div></div>
         <div class="ov-kpi"><div class="lbl">อันดับ 1</div><div class="val" style="color:var(--fg);font-size:14px">${esc(p2Data[0]?.name||'—')}</div><div class="sub">${fmt(p2Data[0]?.streams||0)} streams</div></div>
@@ -3835,7 +3835,7 @@ function renderOverview(){
     const rtTotal=p3_rtData.reduce((s,r)=>s+r.units,0);
     const sgTotal=p3_sgData.reduce((s,r)=>s+r.units,0);
     html+=`<div class="ov-section">
-      <div class="ov-sec-title"><span class="ov-phase-badge" style="background:rgba(219,39,119,.1);color:var(--pink);border:1px solid rgba(219,39,119,.2)">Phase 3</span>Ringtone &amp; Song Downloads</div>
+      <div class="ov-sec-title"><span class="ov-phase-badge" style="background:rgba(219,39,119,.1);color:var(--pink);border:1px solid rgba(219,39,119,.2)">Ringtone & Song</span>Ringtone &amp; Song Downloads</div>
       <div class="ov-grid">
         <div class="ov-kpi"><div class="lbl">Ringtone Total</div><div class="val" style="color:var(--pink)">${fmt(rtTotal)}</div><div class="sub">${p3_rtData.length} รายการ</div></div>
         <div class="ov-kpi"><div class="lbl">Song Total</div><div class="val" style="color:var(--orange)">${fmt(sgTotal)}</div><div class="sub">${p3_sgData.length} รายการ</div></div>
@@ -3868,7 +3868,7 @@ function renderOverview(){
     const diff=prev?last.total-prev.total:null;
     const pct=prev&&prev.total>0?((last.total-prev.total)/prev.total*100):null;
     html+=`<div class="ov-section">
-      <div class="ov-sec-title"><span class="ov-phase-badge" style="background:rgba(124,58,237,.1);color:var(--violet);border:1px solid rgba(124,58,237,.2)">Phase 4</span>WW Streams Summary (${results.length} สัปดาห์)</div>
+      <div class="ov-sec-title"><span class="ov-phase-badge" style="background:rgba(124,58,237,.1);color:var(--violet);border:1px solid rgba(124,58,237,.2)">WW Top Chart</span>WW Streams Summary (${results.length} สัปดาห์)</div>
       <div class="ov-grid" style="grid-template-columns:repeat(${Math.min(3,results.length)},1fr)">
         ${results.slice(-3).map(r=>`<div class="ov-kpi"><div class="lbl">${esc(r.label)}</div><div class="val" style="color:var(--violet);font-size:16px">${fmt(r.total)}</div><div class="sub">${esc(r.dateRange||'')}</div></div>`).join('')}
       </div>
@@ -3935,7 +3935,7 @@ const SM_URL_KEY = 'streamingLogger_appsScriptUrl';
 
 // ── เปิด Modal ──
 function p4SaveToSheets(){
-  if(!p4_results||!p4_results.length){ toast('⚠ ยังไม่มีผลลัพธ์ Phase 4'); return; }
+  if(!p4_results||!p4_results.length){ toast('⚠ ยังไม่มีผลลัพธ์ WW Top Chart'); return; }
   smBuildPreview();
   // โหลด URL ที่บันทึกไว้ก่อนหน้า (localStorage)
   const saved = (() => { try{ return localStorage.getItem(SM_URL_KEY)||''; }catch(e){return '';} })();
