@@ -2422,10 +2422,8 @@ async function parseAppleP3(file){
           if(units>0||prevUnits>0) rows.push({appleId,name,artist,type,units,prevUnits});
         }
         const dateLabel = String((raw[0]||[])[1]||'').trim();
-        // ใช้ manualTotal (Apple website total) ถ้ามี ไม่งั้น sum rows
-        const rowsSum = rows.reduce((s,r)=>s+r.units,0);
-        const total = (manualTotal && manualTotal>0) ? manualTotal : rowsSum;
-        resolve({rows, dateLabel, manualTotal: total});
+        // คืนค่า manualTotal แยกจาก rowsSum เพื่อให้ p3Run รู้ว่ามี Apple total จริงหรือเปล่า
+        resolve({rows, dateLabel, manualTotal: manualTotal||null, rowsSum});
       }catch(err){ reject(err); }
     };
     reader.onerror = () => reject(new Error('อ่านไฟล์ไม่ได้'));
@@ -2493,19 +2491,20 @@ async function p3Run(){
     const sgFromRows  = sgRows.reduce((s,r)=>s+r.units,0);
     const sumFromRows = rtFromRows + sgFromRows;
 
-    // ถ้ามี manualTotal → ใช้เป็น grand total แล้ว derive สัดส่วน RT/SG จาก rows
+    // ถ้ามี manualTotal (Apple website total) → ใช้เป็น grand total
+    // ถ้าไม่มี → sum จาก rows
     let rtTotal, sgTotal, grandTotal, totalNote;
-    if(manualTotal && manualTotal > sumFromRows){
+    if(manualTotal && manualTotal > 0){
       grandTotal = manualTotal;
-      // scale RT/SG ตามสัดส่วนจาก rows (เพื่อ donut chart)
+      // scale RT/SG ตามสัดส่วนจาก rows
       const rtRatio = sumFromRows>0 ? rtFromRows/sumFromRows : 0.5;
       rtTotal = Math.round(grandTotal * rtRatio);
       sgTotal = grandTotal - rtTotal;
-      totalNote = `จากไฟล์ ${fmt(grandTotal)} · Top 100 sum ${fmt(sumFromRows)}`;
+      totalNote = `Apple total ${fmt(grandTotal)}`;
     } else {
       rtTotal = rtFromRows; sgTotal = sgFromRows;
       grandTotal = sumFromRows;
-      totalNote = `sum จาก Top 100`;
+      totalNote = `sum จาก rows`;
     }
 
     const rtPrev_inFile = rtRows.reduce((s,r)=>s+r.prevUnits,0);
