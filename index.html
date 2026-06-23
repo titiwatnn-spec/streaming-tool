@@ -2422,6 +2422,7 @@ async function parseAppleP3(file){
           if(units>0||prevUnits>0) rows.push({appleId,name,artist,type,units,prevUnits});
         }
         const dateLabel = String((raw[0]||[])[1]||'').trim();
+        const rowsSum = rows.reduce((s,r)=>s+r.units,0);
         // คืนค่า manualTotal แยกจาก rowsSum เพื่อให้ p3Run รู้ว่ามี Apple total จริงหรือเปล่า
         resolve({rows, dateLabel, manualTotal: manualTotal||null, rowsSum});
       }catch(err){ reject(err); }
@@ -2451,7 +2452,7 @@ async function p3Run(){
 
       const parsed = await parseAppleP3(wk.file);
       const label = wk.label || parsed.dateLabel || ('WW '+(i+1));
-      mergedWeekData.push({label, rows: parsed.rows, dateLabel: parsed.dateLabel, manualTotal: parsed.manualTotal});
+      mergedWeekData.push({label, rows: parsed.rows, dateLabel: parsed.dateLabel, manualTotal: parsed.manualTotal, rowsSum: parsed.rowsSum||0});
     }
     p3WeekData = mergedWeekData;
     if(!p3WeekData.length){ throw new Error('ไม่พบข้อมูลในไฟล์ที่อัปโหลด'); }
