@@ -3370,12 +3370,21 @@ async function gsSave(key, data){
 
 async function gsLoad(key){
   if(!GS_URL) return null;
-  try{
-    const resp = await fetch(`${GS_URL}?key=${key}`);
-    const json = await resp.json();
-    if(json.data) return JSON.parse(json.data);
-    return null;
-  }catch(e){ console.warn('gsLoad error:', e); return null; }
+  return new Promise((resolve)=>{
+    const cbName = '_gsCallback_'+Date.now();
+    const script = document.createElement('script');
+    let done = false;
+    const timeout = setTimeout(()=>{
+      if(!done){ done=true; delete window[cbName]; script.remove(); resolve(null); }
+    }, 10000);
+    window[cbName] = (data) => {
+      if(!done){ done=true; clearTimeout(timeout); delete window[cbName]; script.remove(); }
+      try{ resolve(data?.data ? JSON.parse(data.data) : null); }catch(e){ resolve(null); }
+    };
+    script.src = `${GS_URL}?key=${encodeURIComponent(key)}&callback=${cbName}`;
+    script.onerror = ()=>{ if(!done){ done=true; clearTimeout(timeout); delete window[cbName]; script.remove(); resolve(null); } };
+    document.head.appendChild(script);
+  });
 }
 
 async function gsSyncAll(){
