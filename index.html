@@ -3465,6 +3465,8 @@ function stSaveP2(){
   // Chart และ Timeline ใช้แค่ Top 20 → ไม่จำเป็นต้องเก็บทุกเพลง
   const MAX_SONGS_STORED = 100; // Top 100 สำหรับ Timeline (Top 20 ยังใช้สำหรับ Chart)
 
+  // ── Clear แล้ว save ใหม่ทั้งหมด (ป้องกัน label เก่าปนกับใหม่) ──
+  stSave(SK.p2, []);
   p2WeekData.forEach(wd => {
     const topEntries = [...wd.songMap.entries()]
       .sort((a,b)=>b[1].streams-a[1].streams)
@@ -3484,7 +3486,7 @@ function stSaveP2(){
   // ── Sliding window: ตัด storage ให้เหลือแค่ MAX_STORED ──────
   let arr = stLoad(SK.p2);
   if(arr.length > MAX_STORED){
-    arr = arr.slice(arr.length - MAX_STORED); // เก็บ N ล่าสุด
+    arr = arr.slice(arr.length - MAX_STORED);
     stSave(SK.p2, arr);
   }
 
