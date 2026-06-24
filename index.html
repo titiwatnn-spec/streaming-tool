@@ -2010,7 +2010,7 @@ function p2SubTab(n){
   ['p2-st0','p2-st1','p2-st2'].forEach((id,j)=>$(id).style.cssText=n===j?styles[j]:off);
   if(n===0){ p2RenderSummary(); p2SummaryNeedsRender=false; }
   // inject timeline HTML เมื่อ tab เปิด (container visible แล้ว)
-  if(n===2) p2ShowTimeline();
+  if(n===2){ p2UpdateLabelDropdown(); p2ShowTimeline(); }
 }
 
 async function p2Run(){
@@ -3722,7 +3722,7 @@ function stRestoreAll(){
     $('p1-csv').style.display='inline-flex';
     $('p1-xl').style.display='inline-flex';
     $('p1-save-mom').style.display='inline-flex';
-    p1.filter='all'; p1Render();
+    p1.filter='all'; p1UpdateLabelDropdown(); p1Render();
     const note = document.createElement('div');
     note.style.cssText='font-size:10px;color:var(--fg3);font-family:var(--mono);padding:4px 0 0 2px';
     note.textContent=`💾 โหลดจาก storage · บันทึกเมื่อ ${p1saved.savedAt ? new Date(p1saved.savedAt).toLocaleString('th-TH',{dateStyle:'short',timeStyle:'short'}) : '—'}`;
@@ -3790,6 +3790,7 @@ function stRestoreAll(){
           <div class="k-val">${diff>=0?'+':''}${fmt(diff)}</div>
           <div class="k-sub">${pctWoW!==null?(pctWoW>=0?'+':'')+pctWoW.toFixed(1)+'%':''} ${esc(prev.label)} → ${esc(latest.label)}</div></div>`:''}`;
       p2RenderSummary(); p2RenderChart(p2_data,maxS);
+      p2UpdateLabelDropdown();
       $('p2-res').style.display='block';
       $('p2-rst').style.display='inline-flex'; $('p2-csv').style.display='inline-flex';
       // pre-render timeline ไว้เลย (container hidden แต่ข้อมูลพร้อม)
