@@ -3476,7 +3476,9 @@ function stSaveP2(){
 
   // ── Clear แล้ว save ใหม่ทั้งหมด (ป้องกัน label เก่าปนกับใหม่) ──
   stSave(SK.p2, []);
-  p2WeekData.forEach(wd => {
+  // เซฟเฉพาะ WW ที่มีข้อมูลจริง (songMap ไม่ว่าง)
+  const realWeeks = p2WeekData.filter(wd => wd.songMap && wd.songMap.size > 0);
+  realWeeks.forEach(wd => {
     const topEntries = [...wd.songMap.entries()]
       .sort((a,b)=>b[1].streams-a[1].streams)
       .slice(0, MAX_SONGS_STORED);
