@@ -2743,7 +2743,7 @@ async function p3Run(){
     p3RenderChart(p3_rtData, 'rt');
     p3RenderChart(p3_sgData, 'sg');
     p3DrawDonut(rtTotal, sgTotal);
-    if(p3WeekData.length > 1) p3RenderTimeline();
+    if(p3WeekData.length >= 1) p3RenderTimeline();
 
     $('p3-prog').style.display='none'; $('p3-res').style.display='block';
     $('p3-rst').style.display='inline-flex'; $('p3-csv').style.display='inline-flex';
@@ -3829,6 +3829,7 @@ function stRestoreAll(){
           <div class="k-val">${fmt(grandTotal)}</div>
           <div class="k-sub">${p3WeekData.length} สัปดาห์ · ${p3WeekData.map(w=>esc(w.label)).join(' · ')}</div></div>`;
       p3RenderChart(p3_rtData,'rt'); p3RenderChart(p3_sgData,'sg'); p3DrawDonut(rtTotal,sgTotal);
+      if(p3WeekData.length>=1) p3RenderTimeline();
       $('p3-res').style.display='block';
       $('p3-rst').style.display='inline-flex'; $('p3-csv').style.display='inline-flex';
     }catch(e){console.warn('P3 restore error',e);}
