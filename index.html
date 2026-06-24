@@ -2095,6 +2095,7 @@ async function p2Run(){
       .map(([k,d])=>({...d,_key:k}))
       .sort((a,b)=>b.streams-a.streams);
     const top20 = sorted.slice(0,20);
+    const top100 = sorted.slice(0,100);
 
     // Prev rank map (from previous week)
     let prevRankMap=new Map();
@@ -2104,16 +2105,16 @@ async function p2Run(){
     }
 
     const maxS = top20[0]?.streams||1;
-    const hasPrev = !!prev;   // มีสัปดาห์ก่อนหน้าจริงๆ ไหม
-    p2_data = top20.map((r,i)=>{
+    const hasPrev = !!prev;
+
+    // p2_data = Top 100 (Timeline), chart uses top20 slice
+    p2_data = top100.map((r,i)=>{
       const rank=i+1;
       const prevS=prev?((prev.songMap.get(r._key)||{streams:0}).streams):0;
       const prevRk=prevRankMap.get(r._key)||null;
       const rkChg=prevRk?prevRk-rank:null;
       const pctChg=prevS>0?((r.streams-prevS)/prevS*100):null;
-      // isNewEntry = มี prev week แต่เพลงนี้ไม่เคยมียอดใน prev → ถือเป็น NEW จริงๆ
       const isNewEntry = hasPrev && prevS===0;
-      // Full history across all weeks
       const history=p2WeekData.map(wd=>{
         const entry=wd.songMap.get(r._key);
         return entry?entry.streams:null;
@@ -2143,7 +2144,7 @@ async function p2Run(){
     p2SP(100,''); await tick();
     p2RenderSummary();
     if(hasRankingData){
-      p2RenderChart(p2_data, maxS);
+      p2RenderChart(p2_data.slice(0,20), maxS);
       $('p2-chart').style.display='block';
       const noDataNotice = $('p2-no-ranking');
       if(noDataNotice) noDataNotice.style.display='none';
@@ -3767,7 +3768,7 @@ function stRestoreAll(){
       const latest=p2WeekData[p2WeekData.length-1];
       const prev=p2WeekData.length>1?p2WeekData[p2WeekData.length-2]:null;
       const sorted=[...latest.songMap.entries()].map(([k,d])=>({...d,_key:k})).sort((a,b)=>b.streams-a.streams);
-      const top20=sorted.slice(0,100); // top 100 for timeline
+      const top20=sorted.slice(0,100); // top 100 สำหรับ Timeline
       let prevRankMap=new Map();
       if(prev){[...prev.songMap.entries()].sort((a,b)=>b[1].streams-a[1].streams).forEach(([k],i)=>prevRankMap.set(k,i+1));}
       const maxS=top20[0]?.streams||1, hasPrev=!!prev;
@@ -3778,6 +3779,7 @@ function stRestoreAll(){
         return {...r,rank,prevStreams:prevS,prevRank:prevRk,rankChange:rkChg,pctChange:pctChg,isNewEntry:hasPrev&&prevS===0};
       });
       p2Data=p2_data;
+      const chartData=p2_data.slice(0,20); // Chart ใช้แค่ Top 20
       const latestTotal=latest.grandTotal||0;
       const prevTotal=prev?(prev.grandTotal||0):null;
       const diff=prevTotal!==null?latestTotal-prevTotal:null;
@@ -3794,7 +3796,7 @@ function stRestoreAll(){
         ${diff!==null?`<div class="kpi ${diff>=0?'kpos':'kneg'}"><div class="k-lbl">📈 WOW CHANGE</div>
           <div class="k-val">${diff>=0?'+':''}${fmt(diff)}</div>
           <div class="k-sub">${pctWoW!==null?(pctWoW>=0?'+':'')+pctWoW.toFixed(1)+'%':''} ${esc(prev.label)} → ${esc(latest.label)}</div></div>`:''}`;
-      p2RenderSummary(); p2RenderChart(p2_data,maxS);
+      p2RenderSummary(); p2RenderChart(chartData, maxS);
       p2UpdateLabelDropdown();
       $('p2-res').style.display='block';
       $('p2-rst').style.display='inline-flex'; $('p2-csv').style.display='inline-flex';
