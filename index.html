@@ -704,6 +704,11 @@ td.src{text-align:center;width:110px} td.art{color:var(--fg2)}
           <button class="f-btn fall" id="p1-fa"  onclick="p1Filter('all')">ทั้งหมด</button>
           <button class="f-btn"      id="p1-fap" onclick="p1Filter('apple')">Apple</button>
           <button class="f-btn"      id="p1-fvg" onclick="p1Filter('virgin')">Virgin</button>
+          <select id="p1-label-sel" onchange="p1Render()"
+            style="height:34px;padding:0 10px;border-radius:var(--r-sm);border:1.5px solid var(--line2);
+            background:var(--bg2);color:var(--fg);font-size:12px;font-family:var(--thai);cursor:pointer">
+            <option value="">🏷 ทุก Label</option>
+          </select>
           <span class="rc" id="p1-rc"></span>
         </div>
         <div class="tbl-scroll">
@@ -712,6 +717,9 @@ td.src{text-align:center;width:110px} td.art{color:var(--fg2)}
             <th class="tr">Streams</th><th class="tc">แหล่งข้อมูล</th>
           </tr></thead><tbody id="p1-tbody"></tbody></table>
         </div>
+        <div id="p1-label-sum" style="display:none;padding:10px 16px;background:var(--blue-soft);
+          border-top:1px solid var(--blue-mid);font-family:var(--mono);font-size:12px;
+          color:var(--blue);font-weight:700;text-align:right"></div>
       </div>
     </div>
   </div>
@@ -784,8 +792,16 @@ td.src{text-align:center;width:110px} td.art{color:var(--fg2)}
           <div class="panel-title">Track อันดับและ Streams ทุกสัปดาห์</div>
           <div style="margin-bottom:10px;display:flex;gap:8px;align-items:center;flex-wrap:wrap">
             <input class="s-box" type="text" id="p2-tl-search" placeholder="🔍 ค้นหาเพลง..." oninput="p2RenderTimeline()" style="max-width:220px">
-            <span style="font-size:11px;color:var(--fg3)">แสดงเฉพาะเพลงที่ค้นหา หรือเว้นว่างเพื่อดู Top 20</span>
+            <select id="p2-label-sel" onchange="p2RenderTimeline()"
+              style="height:36px;padding:0 10px;border-radius:var(--r-sm);border:1.5px solid var(--line2);
+              background:var(--bg2);color:var(--fg);font-size:12px;font-family:var(--thai);cursor:pointer">
+              <option value="">🏷 ทุก Label</option>
+            </select>
+            <span style="font-size:11px;color:var(--fg3)">แสดง Top 100 หรือค้นหา/กรอง Label</span>
           </div>
+          <div id="p2-label-sum" style="display:none;padding:8px 14px;background:var(--blue-soft);
+            border-radius:var(--r-sm);margin-bottom:8px;font-family:var(--mono);font-size:12px;
+            color:var(--blue);font-weight:700"></div>
           <div id="p2-timeline-table" style="overflow-x:auto"></div>
         </div>
       </div>
@@ -1095,11 +1111,10 @@ function parseVirgin(file){
         const iS=hdr.findIndex(h=>/song.?name/i.test(h));
         const iA=hdr.findIndex(h=>/song.?main.?artist/i.test(h)||/^artist$/i.test(h));
         const iQ=hdr.findIndex(h=>/^quantity$/i.test(h));
+        const iL=hdr.findIndex(h=>/label.?name/i.test(h)||/^label$/i.test(h));
         if(iQ<0) throw new Error('Virgin: ไม่พบคอลัมน์ Quantity');
         if(iS<0) throw new Error('Virgin: ไม่พบคอลัมน์ Song Name');
-        // Use "Song Name \x00 Artist" as composite key to prevent
-        // same-name different-artist songs from being merged (e.g. covers)
-        const qmap=new Map(); // key→qty, key→{name,art}
+        const qmap=new Map();
         const metaMap=new Map();
         for(let i=1;i<lines.length;i++){
           if(!lines[i].trim()) continue;
@@ -1107,16 +1122,17 @@ function parseVirgin(file){
           const song=(cols[iS]||'').trim();
           const art=iA>=0?(cols[iA]||'').trim():'';
           const qty=parseInt(cols[iQ]||'0',10);
+          const lbl=iL>=0?(cols[iL]||'').trim():'';
           if(!song||isNaN(qty)||qty<=0) continue;
-          // composite key: song name + artist (case-insensitive artist normalise)
           const key=song+'\x00'+art.toLowerCase();
           qmap.set(key,(qmap.get(key)||0)+qty);
-          if(!metaMap.has(key)) metaMap.set(key,{name:song,artist:art});
+          // เก็บ label จาก row แรกที่เจอ (label เดียวต่อเพลง)
+          if(!metaMap.has(key)) metaMap.set(key,{name:song,artist:art,label:lbl});
         }
         const rows=[];
         for(const [key,streams] of qmap){
           const m=metaMap.get(key)||{};
-          rows.push({name:m.name||'',artist:m.artist||'',streams});
+          rows.push({name:m.name||'',artist:m.artist||'',streams,label:m.label||''});
         }
         res({rows,total:[...qmap.values()].reduce((s,v)=>s+v,0)});
       }catch(err){rej(err);}
@@ -1184,7 +1200,7 @@ async function p1Run(){
       p1SP(15,'กำลังอ่าน Apple Top 100...'); await tick();
       const r=await parseAppleP1(p1.fa); aSongs=r.rows.length;
       if(!p1.fw) aTotal=r.total; // fallback ถ้าไม่มี WW Number
-      r.rows.forEach(x=>{ if(!x.name) return; const k=norm(x.name)+'|'+norm(x.artist); mergeMap.set(k,{...x,source:'apple'}); });
+      r.rows.forEach(x=>{ if(!x.name) return; const k=norm(x.name)+'|'+norm(x.artist); mergeMap.set(k,{...x,source:'apple',label:'Apple Direct'}); });
     }
 
     // ── Apple WW Number → Apple Total จริง (รวม non-Top100) ─
@@ -1214,9 +1230,9 @@ async function p1Run(){
             const diffVer=hasVersion(fallbackKey.split('|')[0])!==hasVersion(nName);
             const sameArt=isSameArtist(x.artist,ae.artist);
             if(!diffVer&&sameArt){ ae.streams+=x.streams; ae.source='Apple+Virgin'; }
-            else{ mergeMap.set(k,{...x,source:'virgin'}); if(!normNameIndex.has(nName)) normNameIndex.set(nName,k); }
+            else{ mergeMap.set(k,{...x,source:'virgin',label:x.label||''}); if(!normNameIndex.has(nName)) normNameIndex.set(nName,k); }
           } else {
-            mergeMap.set(k,{...x,source:'virgin'});
+            mergeMap.set(k,{...x,source:'virgin',label:x.label||''});
             if(!normNameIndex.has(nName)) normNameIndex.set(nName,k);
           }
         }
@@ -1224,6 +1240,7 @@ async function p1Run(){
     }
 
     p1.rows = [...mergeMap.values()];
+    p1UpdateLabelDropdown();
     p1SP(88,'กำลังเรียงลำดับ...'); await tick();
     p1.rows.sort((a,b)=>b.streams-a.streams);
     p1.rows.forEach((r,i)=>r.rank=i+1);
@@ -1272,11 +1289,14 @@ function p1SetFUI(f){
 }
 function p1Render(){
   const q=$('p1-search').value.toLowerCase();
+  const labelF = p1GetLabelFilter();
   let rows=p1.rows;
   if(p1.filter==='apple') rows=rows.filter(r=>r.source==='apple'||r.source==='Apple+Virgin');
   else if(p1.filter==='virgin') rows=rows.filter(r=>r.source==='virgin'||r.source==='Apple+Virgin');
+  if(labelF) rows=rows.filter(r=>(r.label||'')=== labelF);
   if(q) rows=rows.filter(r=>r.name.toLowerCase().includes(q)||r.artist.toLowerCase().includes(q));
   $('p1-rc').textContent=rows.length.toLocaleString()+' รายการ';
+  showLabelSum('p1-label-sum', rows, labelF);
   const tbody=$('p1-tbody');
   if(!rows.length){tbody.innerHTML='<tr><td colspan="5" class="no-data">ไม่พบข้อมูล</td></tr>';return;}
   const show=rows.slice(0,3000);
@@ -2027,7 +2047,7 @@ async function p2Run(){
           appleTotal=r.total;
         } else {
           appleTotal=r.total;
-          r.rows.forEach(x=>{if(!x.name)return;const k=mkKey(x.name,x.artist);const ex=songMap.get(k)||{name:x.name,artist:x.artist,streams:0};ex.streams+=x.curr;songMap.set(k,ex);});
+          r.rows.forEach(x=>{if(!x.name)return;const k=mkKey(x.name,x.artist);const ex=songMap.get(k)||{name:x.name,artist:x.artist,streams:0,label:x.label||''};ex.streams+=x.curr;if(!ex.label&&x.label)ex.label=x.label;songMap.set(k,ex);});
         }
         // Gap #3: auto-label จาก dateRange ในไฟล์ถ้า label ยังเป็น default
         if(r.dateRange && /^WW\s*\d+$/i.test(wk.label)){
@@ -2040,7 +2060,7 @@ async function p2Run(){
       if(wk.appleFile){
         const r=await parseAppleP2(wk.appleFile);
         if(!r.isSummary){
-          r.rows.forEach(x=>{if(!x.name)return;const k=mkKey(x.name,x.artist);const ex=songMap.get(k)||{name:x.name,artist:x.artist,streams:0};ex.streams+=x.curr;songMap.set(k,ex);});
+          r.rows.forEach(x=>{if(!x.name)return;const k=mkKey(x.name,x.artist);const ex=songMap.get(k)||{name:x.name,artist:x.artist,streams:0,label:x.label||''};ex.streams+=x.curr;if(!ex.label&&x.label)ex.label=x.label;songMap.set(k,ex);});
           if(!wk.wwFile) appleTotal=r.total;
         } else { if(!wk.wwFile) appleTotal=r.total; }
       }
@@ -2049,7 +2069,7 @@ async function p2Run(){
       if(wk.virginFile){
         const r=await parseVirgin(wk.virginFile);
         virginTotal=r.total||0;
-        r.rows.forEach(x=>{if(!x.name)return;const k=mkKey(x.name,x.artist);const ex=songMap.get(k);if(ex){ex.streams+=x.streams;}else songMap.set(k,{name:x.name,artist:x.artist,streams:x.streams});});
+        r.rows.forEach(x=>{if(!x.name)return;const k=mkKey(x.name,x.artist);const ex=songMap.get(k);if(ex){ex.streams+=x.streams;}else songMap.set(k,{name:x.name,artist:x.artist,streams:x.streams,label:x.label||''});});
       }
       const grandTotal=appleTotal+virginTotal;
       if(grandTotal>0 || songMap.size>0){
@@ -2145,6 +2165,7 @@ async function p2Run(){
     $('p2-prog').style.display='none'; $('p2-res').style.display='block';
     $('p2-rst').style.display='inline-flex'; $('p2-csv').style.display='inline-flex';
     p2SummaryNeedsRender = true;
+    p2UpdateLabelDropdown();
     // ── render timeline AFTER p2-res is visible ──────────────
     if(p2WeekData.length>1) p2RenderTimeline();
     stSaveP2();
@@ -2217,7 +2238,22 @@ function p2RenderTimeline(){
   if(!tbl) return;
   if(!p2_data.length||!p2WeekData.length){ p2TimelineHTML=''; tbl.innerHTML=''; return; }
   const q=($('p2-tl-search')||{value:''}).value.toLowerCase();
-  const rows=q ? p2_data.filter(r=>r.name.toLowerCase().includes(q)||r.artist.toLowerCase().includes(q)) : p2_data.slice(0,100);
+  const labelF = p2GetLabelFilter();
+  let rows = p2_data;
+  if(q) rows=rows.filter(r=>r.name.toLowerCase().includes(q)||r.artist.toLowerCase().includes(q));
+  if(labelF) rows=rows.filter(r=>{
+    // หา label จาก latest songMap
+    const entry = p2WeekData.length ? p2WeekData[p2WeekData.length-1].songMap.get(r._key) : null;
+    return (entry?.label||r.label||'')=== labelF;
+  });
+  if(!q&&!labelF) rows=rows.slice(0,100);
+  // sum for label
+  const labelSumEl = $('p2-label-sum');
+  if(labelF && labelSumEl){
+    const sum = rows.reduce((s,r)=>s+(r.streams||0),0);
+    labelSumEl.innerHTML=`🏷 <b>${esc(labelF)}</b> · ${rows.length.toLocaleString()} เพลง · Σ ${fmt(sum)}`;
+    labelSumEl.style.display='block';
+  } else if(labelSumEl){ labelSumEl.style.display='none'; }
   const labels=p2WeekData.map(w=>w.label);
 
   // ── Pre-compute rank maps O(WW × n log n) ──────────────────
@@ -4127,7 +4163,48 @@ function smSetStatus(type, msg){
   el.textContent = msg;
 }
 
-// ════════════════ EXPORT PPTX ════════════════════════════════
+// ════════════════ LABEL FILTER ════════════════════════════════
+
+// ── populate dropdown จาก rows ────────────────────────────────
+function populateLabelDropdown(selId, rows, labelKey='label'){
+  const sel = $(selId); if(!sel) return;
+  const cur = sel.value;
+  const labels = [...new Set(rows.map(r=>r[labelKey]||'').filter(Boolean))].sort();
+  sel.innerHTML = '<option value="">🏷 ทุก Label</option>' +
+    labels.map(l=>`<option value="${esc(l)}"${l===cur?'selected':''}>${esc(l)}</option>`).join('');
+}
+
+// ── Phase 1 label filter ──────────────────────────────────────
+function p1GetLabelFilter(){ return ($('p1-label-sel')||{value:''}).value; }
+
+function p1UpdateLabelDropdown(){
+  populateLabelDropdown('p1-label-sel', p1.rows);
+}
+
+// ── Phase 2 label filter ──────────────────────────────────────
+function p2GetLabelFilter(){ return ($('p2-label-sel')||{value:''}).value; }
+
+function p2UpdateLabelDropdown(){
+  if(!p2_data||!p2_data.length) return;
+  // รวม labels จากทุก WW
+  const allLabels = new Set();
+  p2WeekData.forEach(wd=>[...wd.songMap.values()].forEach(v=>{ if(v.label) allLabels.add(v.label); }));
+  const sel = $('p2-label-sel'); if(!sel) return;
+  const cur = sel.value;
+  sel.innerHTML = '<option value="">🏷 ทุก Label</option>' +
+    [...allLabels].sort().map(l=>`<option value="${esc(l)}"${l===cur?'selected':''}>${esc(l)}</option>`).join('');
+}
+
+// ── Label sum bar ─────────────────────────────────────────────
+function showLabelSum(elId, rows, labelName, streamKey='streams'){
+  const el = $(elId); if(!el) return;
+  if(!labelName){ el.style.display='none'; return; }
+  const sum = rows.reduce((s,r)=>s+(r[streamKey]||0),0);
+  el.innerHTML = `🏷 <b>${esc(labelName)}</b> · ${rows.length.toLocaleString()} เพลง · Σ ${fmt(sum)}`;
+  el.style.display='block';
+}
+
+// ════════════════════════════════════════════════════════════════
 async function exportPPTX(){
   const btn = $('ov-pptx-btn');
   if(btn){ btn.disabled=true; btn.textContent='⏳ กำลังสร้าง...'; }
