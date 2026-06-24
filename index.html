@@ -2079,10 +2079,9 @@ async function p2Run(){
         r.rows.forEach(x=>{if(!x.name)return;const k=mkKey(x.name,x.artist);const ex=songMap.get(k);if(ex){ex.streams+=x.streams;}else songMap.set(k,{name:x.name,artist:x.artist,streams:x.streams,label:x.label||''});});
       }
       const grandTotal=appleTotal+virginTotal;
-      if(grandTotal>0 || songMap.size>0){
+      if(songMap.size>0 || appleTotal>0 || virginTotal>0 || grandTotal>0 ||
+         wk.wwFile || wk.appleFile || wk.virginFile){
         mergedWeekData.push({label:wk.label,songMap,appleTotal,virginTotal,grandTotal});
-      } else if(wk._fromStorage){
-        // storage slot แต่ parse ไฟล์ไม่ได้ข้อมูล → ข้ามไป
       }
     }
 
@@ -3481,11 +3480,9 @@ function stSaveP2(){
   // Chart และ Timeline ใช้แค่ Top 20 → ไม่จำเป็นต้องเก็บทุกเพลง
   const MAX_SONGS_STORED = 100; // Top 100 สำหรับ Timeline (Top 20 ยังใช้สำหรับ Chart)
 
-  // ── Clear แล้ว save ใหม่ทั้งหมด (ป้องกัน label เก่าปนกับใหม่) ──
+  // ── Clear แล้ว save ใหม่ทั้งหมด ──────────────────────────────
   stSave(SK.p2, []);
-  // เซฟเฉพาะ WW ที่มีข้อมูลจริง (songMap ไม่ว่าง)
-  const realWeeks = p2WeekData.filter(wd => wd.songMap && wd.songMap.size > 0);
-  realWeeks.forEach(wd => {
+  p2WeekData.forEach(wd => {
     const topEntries = [...wd.songMap.entries()]
       .sort((a,b)=>b[1].streams-a[1].streams)
       .slice(0, MAX_SONGS_STORED);
