@@ -2110,13 +2110,13 @@ async function p2Run(){
     const kpiWrap=$('p2-kpis');
     kpiWrap.style.gridTemplateColumns=diff!==null?'repeat(3,1fr)':'repeat(2,1fr)';
     kpiWrap.innerHTML=`
-      <div class="kpi kt"><div class="k-lbl">📊 Total Streams (${esc(latest.label)})</div>
-        <div class="k-val" style="color:var(--teal)">${fmt(latestTotal)}</div>
+      <div class="kpi kt"><div class="k-lbl">📊 TOTAL STREAMS (${esc(latest.label)})</div>
+        <div class="k-val">${fmt(latestTotal)}</div>
         <div class="k-sub">🍎 ${fmt(latest.appleTotal||0)} · 🟢 ${fmt(latest.virginTotal||0)}</div></div>
       <div class="kpi kt"><div class="k-lbl">📅 สัปดาห์ที่โหลด</div>
-        <div class="k-val" style="font-size:18px">${p2WeekData.length}</div>
+        <div class="k-val">${p2WeekData.length}</div>
         <div class="k-sub">${p2WeekData.map(w=>esc(w.label)).join(' · ')}</div></div>
-      ${diff!==null?`<div class="kpi ${diff>=0?'kpos':'kneg'}"><div class="k-lbl">📈 WoW Change</div>
+      ${diff!==null?`<div class="kpi ${diff>=0?'kpos':'kneg'}"><div class="k-lbl">📈 WOW CHANGE</div>
         <div class="k-val">${diff>=0?'+':''}${fmt(diff)}</div>
         <div class="k-sub">${pctWoW!==null?(pctWoW>=0?'+':'')+pctWoW.toFixed(1)+'%':''} ${esc(prev.label)} → ${esc(latest.label)}</div></div>`:''}`;
 
@@ -3742,13 +3742,13 @@ function stRestoreAll(){
       const kw=$('p2-kpis');
       kw.style.gridTemplateColumns=diff!==null?'repeat(3,1fr)':'repeat(2,1fr)';
       kw.innerHTML=`
-        <div class="kpi kt"><div class="k-lbl">📊 Total Streams (${esc(latest.label)})</div>
-          <div class="k-val" style="color:var(--teal)">${fmt(latestTotal)}</div>
+        <div class="kpi kt"><div class="k-lbl">📊 TOTAL STREAMS (${esc(latest.label)})</div>
+          <div class="k-val">${fmt(latestTotal)}</div>
           <div class="k-sub">🍎 ${fmt(latest.appleTotal||0)} · 🟢 ${fmt(latest.virginTotal||0)}</div></div>
         <div class="kpi kt"><div class="k-lbl">📅 สัปดาห์ที่โหลด</div>
-          <div class="k-val" style="font-size:18px">${p2WeekData.length}</div>
+          <div class="k-val">${p2WeekData.length}</div>
           <div class="k-sub">${p2WeekData.map(w=>esc(w.label)).join(' · ')}</div></div>
-        ${diff!==null?`<div class="kpi ${diff>=0?'kpos':'kneg'}"><div class="k-lbl">📈 WoW Change</div>
+        ${diff!==null?`<div class="kpi ${diff>=0?'kpos':'kneg'}"><div class="k-lbl">📈 WOW CHANGE</div>
           <div class="k-val">${diff>=0?'+':''}${fmt(diff)}</div>
           <div class="k-sub">${pctWoW!==null?(pctWoW>=0?'+':'')+pctWoW.toFixed(1)+'%':''} ${esc(prev.label)} → ${esc(latest.label)}</div></div>`:''}`;
       p2RenderSummary(); p2RenderChart(p2_data,maxS);
