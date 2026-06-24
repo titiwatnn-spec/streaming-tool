@@ -3456,13 +3456,15 @@ function stSave(key, data){
   }
 }
 
-// ── Upsert: overwrite ถ้า label ซ้ำ ─────────────────────────────
+// ── Upsert: overwrite ถ้า label ซ้ำ, เก็บสูงสุด MAX_STORED ─────────
 function stUpsert(key, newEntry){
   let arr = stLoad(key);
   const idx = arr.findIndex(e => e.label === newEntry.label);
-  if(idx >= 0) arr[idx] = newEntry;  // overwrite
+  if(idx >= 0) arr[idx] = newEntry;
   else arr.push(newEntry);
-  // ไม่ตัด sliding window ที่นี่ — ให้แต่ละ phase จัดการเอง
+  // ใช้ buffer ใหญ่กว่า MAX_STORED เพื่อให้ stSaveP2 เป็นตัวตัดสุดท้าย
+  const buf = MAX_STORED * 2;
+  if(arr.length > buf) arr = arr.slice(arr.length - buf);
   stSave(key, arr);
 }
 
@@ -3480,8 +3482,7 @@ function stSaveP2(){
   // Chart และ Timeline ใช้แค่ Top 20 → ไม่จำเป็นต้องเก็บทุกเพลง
   const MAX_SONGS_STORED = 100; // Top 100 สำหรับ Timeline (Top 20 ยังใช้สำหรับ Chart)
 
-  // ── Clear แล้ว save ใหม่ทั้งหมด ──────────────────────────────
-  stSave(SK.p2, []);
+  // ── Save ทุก WW ผ่าน stUpsert ──────────────────────────────
   p2WeekData.forEach(wd => {
     const topEntries = [...wd.songMap.entries()]
       .sort((a,b)=>b[1].streams-a[1].streams)
