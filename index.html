@@ -2032,8 +2032,15 @@ async function p2Run(){
 
       // slot จาก storage และไม่มีไฟล์ใหม่ → ใช้ข้อมูลเดิม
       if(wk._fromStorage && !wk.wwFile && !wk.appleFile && !wk.virginFile){
-        const existing = p2WeekData.find(w=>w.label===wk.label);
+        const existing = p2WeekData.find(w=>
+          w.label===wk.label ||
+          wk.label.startsWith(w.label) ||
+          w.label.startsWith(wk.label)
+        );
         if(existing){ mergedWeekData.push(existing); continue; }
+        // fallback: ใช้ index
+        const byIdx = p2WeekData[i];
+        if(byIdx){ mergedWeekData.push(byIdx); continue; }
       }
 
       // parse ไฟล์ใหม่
