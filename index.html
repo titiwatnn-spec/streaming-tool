@@ -2641,8 +2641,14 @@ async function p3Run(){
 
       // slot จาก storage ไม่มีไฟล์ใหม่ → ใช้ข้อมูลเดิม
       if(wk._fromStorage && !wk.file){
-        const existing = p3WeekData.find(w=>w.label===wk.label);
+        // match exact หรือ prefix (label อาจมี dateLabel ต่อท้าย)
+        const existing = p3WeekData.find(w=>
+          w.label===wk.label || wk.label.startsWith(w.label) || w.label.startsWith(wk.label)
+        );
         if(existing){ mergedWeekData.push(existing); continue; }
+        // fallback: ใช้ index
+        const byIdx = p3WeekData[i];
+        if(byIdx){ mergedWeekData.push(byIdx); continue; }
       }
       if(!wk.file) continue;
 
@@ -3434,14 +3440,13 @@ function stSave(key, data){
   }
 }
 
-// ── Upsert: overwrite ถ้า label ซ้ำ, เก็บสูงสุด MAX_STORED ─────────
+// ── Upsert: overwrite ถ้า label ซ้ำ ─────────────────────────────
 function stUpsert(key, newEntry){
   let arr = stLoad(key);
   const idx = arr.findIndex(e => e.label === newEntry.label);
-  if(idx >= 0) arr[idx] = newEntry;           // overwrite
+  if(idx >= 0) arr[idx] = newEntry;  // overwrite
   else arr.push(newEntry);
-  // sliding window: เก็บ 4 ล่าสุด
-  if(arr.length > MAX_STORED) arr = arr.slice(arr.length - MAX_STORED);
+  // ไม่ตัด sliding window ที่นี่ — ให้แต่ละ phase จัดการเอง
   stSave(key, arr);
 }
 
