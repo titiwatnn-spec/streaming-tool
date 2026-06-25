@@ -2238,6 +2238,7 @@ function p2ShowTimeline(){
 }
 
 function p2RenderChart(data, maxS){
+  data = data.slice(0,20); // Top 20 เท่านั้น
   const chart=$('p2-chart'); chart.innerHTML='';
   const streams20=data.map(r=>r.streams).sort((a,b)=>a-b);
   const median20=streams20[Math.floor(streams20.length/2)]||1;
@@ -3525,7 +3526,7 @@ function stLoadP2(){
   if(!arr.length) return false;
   p2WeekData = arr.map(e => ({
     label: e.label,
-    songMap: new Map(e.songMapArr),
+    songMap: new Map(e.songMapArr.map(([k,v])=>[k, typeof v==='object'?v:{streams:v}])),
     appleTotal: e.appleTotal||0,
     virginTotal: e.virginTotal||0,
     grandTotal: e.grandTotal||0
