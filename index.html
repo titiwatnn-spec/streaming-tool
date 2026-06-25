@@ -3552,28 +3552,26 @@ function stLoadP2(){
 function stSaveP3(){
   if(!p3WeekData.length) return;
 
-  p3WeekData.forEach(wd => {
-    stUpsert(SK.p3, {
-      label: wd.label,
-      savedAt: new Date().toISOString(),
-      rows: wd.rows,
-      rowCount: wd.rows.length,
-      manualTotal: wd.manualTotal||null
-    });
-  });
+  // ── Build + Merge + Sliding window → save ครั้งเดียว ────────
+  const newEntries = p3WeekData.map(wd => ({
+    label: wd.label,
+    savedAt: new Date().toISOString(),
+    rows: wd.rows,
+    rowCount: wd.rows.length,
+    manualTotal: wd.manualTotal||null
+  }));
+  const existing = stLoad(SK.p3);
+  const newLabels = new Set(newEntries.map(e=>e.label));
+  let merged = [...existing.filter(e=>!newLabels.has(e.label)), ...newEntries];
+  if(merged.length > MAX_STORED) merged = merged.slice(merged.length - MAX_STORED);
+  stSave(SK.p3, merged);
 
-  // ── Sliding window ──────────────────────────────────────────
-  let arr = stLoad(SK.p3);
-  if(arr.length > MAX_STORED){
-    arr = arr.slice(arr.length - MAX_STORED);
-    stSave(SK.p3, arr);
-  }
+  // ── sync p3WeekData เฉพาะกรณี sliding window ตัดจริง ────────
+  const kept = new Set(merged.map(e=>e.label));
+  if(p3WeekData.some(w=>!kept.has(w.label)))
+    p3WeekData = p3WeekData.filter(w=>kept.has(w.label));
 
-  // ── sync p3WeekData ─────────────────────────────────────────
-  const kept = new Set(arr.map(e=>e.label));
-  p3WeekData = p3WeekData.filter(w=>kept.has(w.label));
-
-  // ── rebuild p3Weeks slots ────────────────────────────────────
+  // ── rebuild p3Weeks slots ─────────────────────────────────────
   p3Weeks = p3WeekData.map(wd=>({label:wd.label, file:null, _fromStorage:true}));
   p3Weeks.push({label:'WW '+(p3Weeks.length+1), file:null});
   p3RenderWeekZones();
