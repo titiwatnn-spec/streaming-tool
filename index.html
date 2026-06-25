@@ -1998,6 +1998,7 @@ async function p2Run(){
       .map(([k,d])=>({...d,_key:k}))
       .sort((a,b)=>b.streams-a.streams);
     const top20 = sorted.slice(0,20);
+    const top100 = sorted.slice(0,100);
 
     // Prev rank map (from previous week)
     let prevRankMap=new Map();
@@ -2007,8 +2008,8 @@ async function p2Run(){
     }
 
     const maxS = top20[0]?.streams||1;
-    const hasPrev = !!prev;   // มีสัปดาห์ก่อนหน้าจริงๆ ไหม
-    p2_data = top20.map((r,i)=>{
+    const hasPrev = !!prev;
+    p2_data = top100.map((r,i)=>{
       const rank=i+1;
       const prevS=prev?((prev.songMap.get(r._key)||{streams:0}).streams):0;
       const prevRk=prevRankMap.get(r._key)||null;
@@ -2140,7 +2141,7 @@ function p2RenderTimeline(){
   if(!tbl) return;
   if(!p2_data.length||!p2WeekData.length){ p2TimelineHTML=''; tbl.innerHTML=''; return; }
   const q=($('p2-tl-search')||{value:''}).value.toLowerCase();
-  const rows=q ? p2_data.filter(r=>r.name.toLowerCase().includes(q)||r.artist.toLowerCase().includes(q)) : p2_data.slice(0,20);
+  const rows=q ? p2_data.filter(r=>r.name.toLowerCase().includes(q)||r.artist.toLowerCase().includes(q)) : p2_data.slice(0,100);
   const labels=p2WeekData.map(w=>w.label);
 
   // ── Pre-compute rank maps O(WW × n log n) ──────────────────
@@ -3344,7 +3345,7 @@ function stSaveP2(){
   // เก็บแค่ Top 20 songs ใน songMapArr
   // Total streams (Apple+Virgin) อยู่ใน grandTotal/appleTotal/virginTotal แล้ว
   // Chart และ Timeline ใช้แค่ Top 20 → ไม่จำเป็นต้องเก็บทุกเพลง
-  const MAX_SONGS_STORED = 20;
+  const MAX_SONGS_STORED = 100;
 
   p2WeekData.forEach(wd => {
     const topEntries = [...wd.songMap.entries()]
@@ -3378,7 +3379,7 @@ function stSaveP2(){
   if(droppedCount>0 && p2WeekData.length){
     const latest=p2WeekData[p2WeekData.length-1];
     const sorted=[...latest.songMap.entries()].map(([k,d])=>({...d,_key:k})).sort((a,b)=>b.streams-a.streams);
-    p2_data=sorted.slice(0,20);
+    p2_data=sorted.slice(0,100);
     p2Data=p2_data;
   }
 
@@ -3648,10 +3649,11 @@ function stRestoreAll(){
       const prev=p2WeekData.length>1?p2WeekData[p2WeekData.length-2]:null;
       const sorted=[...latest.songMap.entries()].map(([k,d])=>({...d,_key:k})).sort((a,b)=>b.streams-a.streams);
       const top20=sorted.slice(0,20);
+      const top100=sorted.slice(0,100);
       let prevRankMap=new Map();
       if(prev){[...prev.songMap.entries()].sort((a,b)=>b[1].streams-a[1].streams).forEach(([k],i)=>prevRankMap.set(k,i+1));}
       const maxS=top20[0]?.streams||1, hasPrev=!!prev;
-      p2_data=top20.map((r,i)=>{
+      p2_data=top100.map((r,i)=>{
         const rank=i+1,prevS=prev?((prev.songMap.get(r._key)||{streams:0}).streams):0;
         const prevRk=prevRankMap.get(r._key)||null,rkChg=prevRk?prevRk-rank:null;
         const pctChg=prevS>0?((r.streams-prevS)/prevS*100):null;
