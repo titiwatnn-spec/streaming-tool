@@ -4223,34 +4223,50 @@ async function exportPPTX(){
         });
       }
 
-      // ── SLIDE 6: Download WoW Bar Chart ─────────────────
+      // ── SLIDE 6: Download WoW 2-Bar Chart ───────────────────
       const s6 = pres.addSlide(); addBg(s6);
       s6.addText('Download iTunes S-One',{x:1.5,y:0.25,w:10,h:0.5,fontSize:15,bold:true,color:C.dark,align:'center'});
-      const rtRows = latP3.rows.filter(r=>r.type==='Ringtone').slice(0,10);
-      const dlLabels=rtRows.map(r=>r.name.length>14?r.name.slice(0,14)+'…':r.name);
-      const dlPrev=rtRows.map(r=>prevMap.get(r.appleId||r.name)||0);
-      const dlCurr=rtRows.map(r=>r.units||0);
-      const tDP=dlPrev.reduce((a,b)=>a+b,0), tDC=dlCurr.reduce((a,b)=>a+b,0);
+
+      // รวม units ทุก row (ringtone + song)
+      const s6CurrTotal = latP3.rows.reduce((a,r)=>a+(r.units||0),0);
+      const s6PrevTotal = (prevP3?.rows||[]).reduce((a,r)=>a+(r.units||0),0);
+      const s6Diff = s6CurrTotal - s6PrevTotal;
+      const s6Pct = s6PrevTotal>0?((s6Diff/s6PrevTotal)*100):0;
+      const s6PctStr = (s6Pct>=0?'+':'')+s6Pct.toFixed(2)+' %';
+      const s6Arrow = s6Diff>=0?'00AA44':'CC0000';
+      const s6PrevLbl = prevP3?.label||'Prev WW';
+      const s6CurrLbl = latP3.label;
+      const s6Min = Math.round(Math.min(s6PrevTotal,s6CurrTotal)*0.9);
+
+      // 2-bar chart
       s6.addChart(pres.charts.BAR,[
-        {name:'Previous WW',labels:dlLabels,values:dlPrev},
-        {name:'Current WW', labels:dlLabels,values:dlCurr},
-      ],{x:1.4,y:0.85,w:10.5,h:4.6,barDir:'col',barGrouping:'clustered',
-        chartColors:['A8D8EA',C.blue],chartArea:{fill:{color:C.white}},
-        catAxisFontSize:7,valAxisFontSize:8,showLegend:true,legendPos:'b',
-        showValue:true,dataLabelFontSize:8,dataLabelPosition:'outEnd'});
-      const tDiff=tDC-tDP;
+        {name:s6PrevLbl, labels:[s6PrevLbl,s6CurrLbl], values:[s6PrevTotal,0]},
+        {name:s6CurrLbl, labels:[s6PrevLbl,s6CurrLbl], values:[0,s6CurrTotal]},
+      ],{x:2.2,y:0.65,w:8.8,h:5.1,barDir:'col',barGrouping:'clustered',
+        chartColors:[C.blue,C.blue],
+        chartArea:{fill:{color:'F5F5F5'}},plotArea:{fill:{color:'F5F5F5'}},
+        catAxisFontSize:11,valAxisFontSize:9,showLegend:false,
+        showValue:true,dataLabelFontSize:12,dataLabelPosition:'outEnd',
+        valAxisMinVal:s6Min});
+
+      // ลูกศรกลาง + %change
+      const arrowShape = s6Diff>=0 ? pres.shapes.UP_ARROW : pres.shapes.DOWN_ARROW;
+      s6.addShape(arrowShape,{x:5.85,y:2.75,w:0.55,h:0.65,fill:{color:s6Arrow},line:{color:s6Arrow}});
+      s6.addText(s6PctStr,{x:5.1,y:3.5,w:2.0,h:0.6,fontSize:20,bold:true,color:s6Arrow,align:'center'});
+
+      // summary table
       s6.addTable([
         [{text:'Day',options:{fill:{color:C.totalBg},bold:true,fontSize:10}},
-         {text:'Prev WW',options:{fill:{color:C.totalBg},bold:true,align:'center',fontSize:10}},
-         {text:'Curr WW',options:{fill:{color:C.totalBg},bold:true,align:'center',fontSize:10}},
+         {text:s6PrevLbl,options:{fill:{color:C.totalBg},bold:true,align:'center',fontSize:10}},
+         {text:s6CurrLbl,options:{fill:{color:C.totalBg},bold:true,align:'center',fontSize:10}},
          {text:'Unit Change',options:{fill:{color:C.totalBg},bold:true,align:'center',fontSize:10}},
          {text:'% Change',options:{fill:{color:C.totalBg},bold:true,align:'center',fontSize:10}}],
         [{text:'Downloads',options:{fill:{color:C.white},bold:true,fontSize:10}},
-         {text:fmt(tDP),options:{fill:{color:C.white},align:'right',fontSize:10}},
-         {text:fmt(tDC),options:{fill:{color:C.white},align:'right',fontSize:10}},
-         {text:(tDiff>=0?'+ ':'- ')+fmt(Math.abs(tDiff)),options:{fill:{color:C.white},align:'right',fontSize:10,color:tDiff>=0?C.green:C.red}},
-         {text:tDP>0?((tDiff/tDP)*100).toFixed(2)+'%':'—',options:{fill:{color:C.white},align:'right',bold:true,fontSize:10,color:tDiff>=0?C.green:C.red}}],
-      ],{x:3.0,y:6.05,w:7.0,colW:[1.8,1.5,1.5,1.5,0.7],border:{type:'solid',pt:0.5,color:'DDDDDD'},rowH:0.28});
+         {text:fmt(s6PrevTotal),options:{fill:{color:C.white},align:'right',fontSize:10}},
+         {text:fmt(s6CurrTotal),options:{fill:{color:C.white},align:'right',fontSize:10}},
+         {text:(s6Diff>=0?'+ ':'- ')+fmt(Math.abs(s6Diff)),options:{fill:{color:C.white},align:'right',fontSize:10,color:s6Diff>=0?C.green:C.red}},
+         {text:s6PrevTotal>0?s6Pct.toFixed(2)+'%':'—',options:{fill:{color:C.white},align:'right',bold:true,fontSize:10,color:s6Diff>=0?C.green:C.red}}],
+      ],{x:2.5,y:5.9,w:8.3,colW:[2.0,1.8,1.8,1.5,1.2],border:{type:'solid',pt:0.5,color:'DDDDDD'},rowH:0.28});
     }
 
     // ── Download ─────────────────────────────────────────────
