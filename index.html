@@ -3476,17 +3476,15 @@ function stDelete(key, label){
 // ── P2: save weekData ──────────────────────────────────────────────
 function stSaveP2(){
   if(!p2WeekData.length) return;
-  console.log('[P2SAVE] p2WeekData.length='+p2WeekData.length+' labels='+p2WeekData.map(w=>w.label).join('|'));
 
   const MAX_SONGS_STORED = 100;
 
-  // ── Save ทุก WW ผ่าน stUpsert ──────────────────────────────
-  p2WeekData.forEach(wd => {
+  // ── Build entries จาก p2WeekData ──────────────────────────
+  const newEntries = p2WeekData.map(wd => {
     const topEntries = [...wd.songMap.entries()]
       .sort((a,b)=>b[1].streams-a[1].streams)
       .slice(0, MAX_SONGS_STORED);
-
-    stUpsert(SK.p2, {
+    return {
       label: wd.label,
       savedAt: new Date().toISOString(),
       songMapArr: topEntries,
@@ -3494,22 +3492,22 @@ function stSaveP2(){
       appleTotal: wd.appleTotal||0,
       virginTotal: wd.virginTotal||0,
       grandTotal: wd.grandTotal||0
-    });
+    };
   });
-  const _arrAfter = stLoad(SK.p2);
-  console.log('[P2SAVE] storage after upserts='+_arrAfter.length+' labels='+_arrAfter.map(e=>e.label).join('|'));
 
-  // ── Sliding window: ตัด storage ให้เหลือแค่ MAX_STORED ──────
-  let arr = stLoad(SK.p2);
-  if(arr.length > MAX_STORED){
-    arr = arr.slice(arr.length - MAX_STORED);
-    stSave(SK.p2, arr);
-  }
+  // ── Merge + Sliding window → save ครั้งเดียว ──────────────
+  // เอา old entries ที่ label ไม่ซ้ำกับ new + new entries
+  // ตัดเหลือ MAX_STORED รายการล่าสุด แล้ว save ทีเดียว
+  const existing = stLoad(SK.p2);
+  const newLabels = new Set(newEntries.map(e=>e.label));
+  let merged = [...existing.filter(e=>!newLabels.has(e.label)), ...newEntries];
+  if(merged.length > MAX_STORED) merged = merged.slice(merged.length - MAX_STORED);
+  stSave(SK.p2, merged);
 
-  // ── sync p2WeekData ให้ตรงกับ storage ──────────────────────
-  const kept = new Set(arr.map(e=>e.label));
+  // ── sync p2WeekData เฉพาะกรณี sliding window ตัดจริง ──────
+  const kept = new Set(merged.map(e=>e.label));
   const droppedCount = p2WeekData.filter(w=>!kept.has(w.label)).length;
-  p2WeekData = p2WeekData.filter(w=>kept.has(w.label));
+  if(droppedCount > 0) p2WeekData = p2WeekData.filter(w=>kept.has(w.label));
 
   // update p2_data ถ้ามีการ drop week (latest week อาจเปลี่ยน)
   if(droppedCount>0 && p2WeekData.length){
