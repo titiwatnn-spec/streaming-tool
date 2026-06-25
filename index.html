@@ -704,11 +704,6 @@ td.src{text-align:center;width:110px} td.art{color:var(--fg2)}
           <button class="f-btn fall" id="p1-fa"  onclick="p1Filter('all')">ทั้งหมด</button>
           <button class="f-btn"      id="p1-fap" onclick="p1Filter('apple')">Apple</button>
           <button class="f-btn"      id="p1-fvg" onclick="p1Filter('virgin')">Virgin</button>
-          <select id="p1-label-sel" onchange="p1Render()"
-            style="height:34px;padding:0 10px;border-radius:var(--r-sm);border:1.5px solid var(--line2);
-            background:var(--bg2);color:var(--fg);font-size:12px;font-family:var(--thai);cursor:pointer">
-            <option value="">🏷 ทุก Label</option>
-          </select>
           <span class="rc" id="p1-rc"></span>
         </div>
         <div class="tbl-scroll">
@@ -717,9 +712,6 @@ td.src{text-align:center;width:110px} td.art{color:var(--fg2)}
             <th class="tr">Streams</th><th class="tc">แหล่งข้อมูล</th>
           </tr></thead><tbody id="p1-tbody"></tbody></table>
         </div>
-        <div id="p1-label-sum" style="display:none;padding:10px 16px;background:var(--blue-soft);
-          border-top:1px solid var(--blue-mid);font-family:var(--mono);font-size:12px;
-          color:var(--blue);font-weight:700;text-align:right"></div>
       </div>
     </div>
   </div>
@@ -792,16 +784,8 @@ td.src{text-align:center;width:110px} td.art{color:var(--fg2)}
           <div class="panel-title">Track อันดับและ Streams ทุกสัปดาห์</div>
           <div style="margin-bottom:10px;display:flex;gap:8px;align-items:center;flex-wrap:wrap">
             <input class="s-box" type="text" id="p2-tl-search" placeholder="🔍 ค้นหาเพลง..." oninput="p2RenderTimeline()" style="max-width:220px">
-            <select id="p2-label-sel" onchange="p2RenderTimeline()"
-              style="height:36px;padding:0 10px;border-radius:var(--r-sm);border:1.5px solid var(--line2);
-              background:var(--bg2);color:var(--fg);font-size:12px;font-family:var(--thai);cursor:pointer">
-              <option value="">🏷 ทุก Label</option>
-            </select>
-            <span style="font-size:11px;color:var(--fg3)">แสดง Top 100 หรือค้นหา/กรอง Label</span>
+            <span style="font-size:11px;color:var(--fg3)">แสดงเฉพาะเพลงที่ค้นหา หรือเว้นว่างเพื่อดู Top 20</span>
           </div>
-          <div id="p2-label-sum" style="display:none;padding:8px 14px;background:var(--blue-soft);
-            border-radius:var(--r-sm);margin-bottom:8px;font-family:var(--mono);font-size:12px;
-            color:var(--blue);font-weight:700"></div>
           <div id="p2-timeline-table" style="overflow-x:auto"></div>
         </div>
       </div>
@@ -1111,10 +1095,11 @@ function parseVirgin(file){
         const iS=hdr.findIndex(h=>/song.?name/i.test(h));
         const iA=hdr.findIndex(h=>/song.?main.?artist/i.test(h)||/^artist$/i.test(h));
         const iQ=hdr.findIndex(h=>/^quantity$/i.test(h));
-        const iL=hdr.findIndex(h=>/label.?name/i.test(h)||/^label$/i.test(h));
         if(iQ<0) throw new Error('Virgin: ไม่พบคอลัมน์ Quantity');
         if(iS<0) throw new Error('Virgin: ไม่พบคอลัมน์ Song Name');
-        const qmap=new Map();
+        // Use "Song Name \x00 Artist" as composite key to prevent
+        // same-name different-artist songs from being merged (e.g. covers)
+        const qmap=new Map(); // key→qty, key→{name,art}
         const metaMap=new Map();
         for(let i=1;i<lines.length;i++){
           if(!lines[i].trim()) continue;
@@ -1122,17 +1107,16 @@ function parseVirgin(file){
           const song=(cols[iS]||'').trim();
           const art=iA>=0?(cols[iA]||'').trim():'';
           const qty=parseInt(cols[iQ]||'0',10);
-          const lbl=iL>=0?(cols[iL]||'').trim():'';
           if(!song||isNaN(qty)||qty<=0) continue;
+          // composite key: song name + artist (case-insensitive artist normalise)
           const key=song+'\x00'+art.toLowerCase();
           qmap.set(key,(qmap.get(key)||0)+qty);
-          // เก็บ label จาก row แรกที่เจอ (label เดียวต่อเพลง)
-          if(!metaMap.has(key)) metaMap.set(key,{name:song,artist:art,label:lbl});
+          if(!metaMap.has(key)) metaMap.set(key,{name:song,artist:art});
         }
         const rows=[];
         for(const [key,streams] of qmap){
           const m=metaMap.get(key)||{};
-          rows.push({name:m.name||'',artist:m.artist||'',streams,label:m.label||''});
+          rows.push({name:m.name||'',artist:m.artist||'',streams});
         }
         res({rows,total:[...qmap.values()].reduce((s,v)=>s+v,0)});
       }catch(err){rej(err);}
@@ -1200,7 +1184,7 @@ async function p1Run(){
       p1SP(15,'กำลังอ่าน Apple Top 100...'); await tick();
       const r=await parseAppleP1(p1.fa); aSongs=r.rows.length;
       if(!p1.fw) aTotal=r.total; // fallback ถ้าไม่มี WW Number
-      r.rows.forEach(x=>{ if(!x.name) return; const k=norm(x.name)+'|'+norm(x.artist); mergeMap.set(k,{...x,source:'apple',label:'Apple Direct'}); });
+      r.rows.forEach(x=>{ if(!x.name) return; const k=norm(x.name)+'|'+norm(x.artist); mergeMap.set(k,{...x,source:'apple'}); });
     }
 
     // ── Apple WW Number → Apple Total จริง (รวม non-Top100) ─
@@ -1230,9 +1214,9 @@ async function p1Run(){
             const diffVer=hasVersion(fallbackKey.split('|')[0])!==hasVersion(nName);
             const sameArt=isSameArtist(x.artist,ae.artist);
             if(!diffVer&&sameArt){ ae.streams+=x.streams; ae.source='Apple+Virgin'; }
-            else{ mergeMap.set(k,{...x,source:'virgin',label:x.label||''}); if(!normNameIndex.has(nName)) normNameIndex.set(nName,k); }
+            else{ mergeMap.set(k,{...x,source:'virgin'}); if(!normNameIndex.has(nName)) normNameIndex.set(nName,k); }
           } else {
-            mergeMap.set(k,{...x,source:'virgin',label:x.label||''});
+            mergeMap.set(k,{...x,source:'virgin'});
             if(!normNameIndex.has(nName)) normNameIndex.set(nName,k);
           }
         }
@@ -1240,7 +1224,6 @@ async function p1Run(){
     }
 
     p1.rows = [...mergeMap.values()];
-    p1UpdateLabelDropdown();
     p1SP(88,'กำลังเรียงลำดับ...'); await tick();
     p1.rows.sort((a,b)=>b.streams-a.streams);
     p1.rows.forEach((r,i)=>r.rank=i+1);
@@ -1289,14 +1272,11 @@ function p1SetFUI(f){
 }
 function p1Render(){
   const q=$('p1-search').value.toLowerCase();
-  const labelF = p1GetLabelFilter();
   let rows=p1.rows;
   if(p1.filter==='apple') rows=rows.filter(r=>r.source==='apple'||r.source==='Apple+Virgin');
   else if(p1.filter==='virgin') rows=rows.filter(r=>r.source==='virgin'||r.source==='Apple+Virgin');
-  if(labelF) rows=rows.filter(r=>(r.label||'')=== labelF);
   if(q) rows=rows.filter(r=>r.name.toLowerCase().includes(q)||r.artist.toLowerCase().includes(q));
   $('p1-rc').textContent=rows.length.toLocaleString()+' รายการ';
-  showLabelSum('p1-label-sum', rows, labelF);
   const tbody=$('p1-tbody');
   if(!rows.length){tbody.innerHTML='<tr><td colspan="5" class="no-data">ไม่พบข้อมูล</td></tr>';return;}
   const show=rows.slice(0,3000);
@@ -2010,7 +1990,7 @@ function p2SubTab(n){
   ['p2-st0','p2-st1','p2-st2'].forEach((id,j)=>$(id).style.cssText=n===j?styles[j]:off);
   if(n===0){ p2RenderSummary(); p2SummaryNeedsRender=false; }
   // inject timeline HTML เมื่อ tab เปิด (container visible แล้ว)
-  if(n===2){ p2UpdateLabelDropdown(); p2ShowTimeline(); }
+  if(n===2) p2ShowTimeline();
 }
 
 async function p2Run(){
@@ -2032,15 +2012,8 @@ async function p2Run(){
 
       // slot จาก storage และไม่มีไฟล์ใหม่ → ใช้ข้อมูลเดิม
       if(wk._fromStorage && !wk.wwFile && !wk.appleFile && !wk.virginFile){
-        const existing = p2WeekData.find(w=>
-          w.label===wk.label ||
-          wk.label.startsWith(w.label) ||
-          w.label.startsWith(wk.label)
-        );
+        const existing = p2WeekData.find(w=>w.label===wk.label);
         if(existing){ mergedWeekData.push(existing); continue; }
-        // fallback: ใช้ index
-        const byIdx = p2WeekData[i];
-        if(byIdx){ mergedWeekData.push(byIdx); continue; }
       }
 
       // parse ไฟล์ใหม่
@@ -2054,7 +2027,7 @@ async function p2Run(){
           appleTotal=r.total;
         } else {
           appleTotal=r.total;
-          r.rows.forEach(x=>{if(!x.name)return;const k=mkKey(x.name,x.artist);const ex=songMap.get(k)||{name:x.name,artist:x.artist,streams:0,label:x.label||''};ex.streams+=x.curr;if(!ex.label&&x.label)ex.label=x.label;songMap.set(k,ex);});
+          r.rows.forEach(x=>{if(!x.name)return;const k=mkKey(x.name,x.artist);const ex=songMap.get(k)||{name:x.name,artist:x.artist,streams:0};ex.streams+=x.curr;songMap.set(k,ex);});
         }
         // Gap #3: auto-label จาก dateRange ในไฟล์ถ้า label ยังเป็น default
         if(r.dateRange && /^WW\s*\d+$/i.test(wk.label)){
@@ -2067,7 +2040,7 @@ async function p2Run(){
       if(wk.appleFile){
         const r=await parseAppleP2(wk.appleFile);
         if(!r.isSummary){
-          r.rows.forEach(x=>{if(!x.name)return;const k=mkKey(x.name,x.artist);const ex=songMap.get(k)||{name:x.name,artist:x.artist,streams:0,label:x.label||''};ex.streams+=x.curr;if(!ex.label&&x.label)ex.label=x.label;songMap.set(k,ex);});
+          r.rows.forEach(x=>{if(!x.name)return;const k=mkKey(x.name,x.artist);const ex=songMap.get(k)||{name:x.name,artist:x.artist,streams:0};ex.streams+=x.curr;songMap.set(k,ex);});
           if(!wk.wwFile) appleTotal=r.total;
         } else { if(!wk.wwFile) appleTotal=r.total; }
       }
@@ -2076,12 +2049,13 @@ async function p2Run(){
       if(wk.virginFile){
         const r=await parseVirgin(wk.virginFile);
         virginTotal=r.total||0;
-        r.rows.forEach(x=>{if(!x.name)return;const k=mkKey(x.name,x.artist);const ex=songMap.get(k);if(ex){ex.streams+=x.streams;}else songMap.set(k,{name:x.name,artist:x.artist,streams:x.streams,label:x.label||''});});
+        r.rows.forEach(x=>{if(!x.name)return;const k=mkKey(x.name,x.artist);const ex=songMap.get(k);if(ex){ex.streams+=x.streams;}else songMap.set(k,{name:x.name,artist:x.artist,streams:x.streams});});
       }
       const grandTotal=appleTotal+virginTotal;
-      if(songMap.size>0 || appleTotal>0 || virginTotal>0 || grandTotal>0 ||
-         wk.wwFile || wk.appleFile || wk.virginFile){
+      if(grandTotal>0 || songMap.size>0){
         mergedWeekData.push({label:wk.label,songMap,appleTotal,virginTotal,grandTotal});
+      } else if(wk._fromStorage){
+        // storage slot แต่ parse ไฟล์ไม่ได้ข้อมูล → ข้ามไป
       }
     }
 
@@ -2101,7 +2075,6 @@ async function p2Run(){
       .map(([k,d])=>({...d,_key:k}))
       .sort((a,b)=>b.streams-a.streams);
     const top20 = sorted.slice(0,20);
-    const top100 = sorted.slice(0,100);
 
     // Prev rank map (from previous week)
     let prevRankMap=new Map();
@@ -2111,16 +2084,16 @@ async function p2Run(){
     }
 
     const maxS = top20[0]?.streams||1;
-    const hasPrev = !!prev;
-
-    // p2_data = Top 100 (Timeline), chart uses top20 slice
-    p2_data = top100.map((r,i)=>{
+    const hasPrev = !!prev;   // มีสัปดาห์ก่อนหน้าจริงๆ ไหม
+    p2_data = top20.map((r,i)=>{
       const rank=i+1;
       const prevS=prev?((prev.songMap.get(r._key)||{streams:0}).streams):0;
       const prevRk=prevRankMap.get(r._key)||null;
       const rkChg=prevRk?prevRk-rank:null;
       const pctChg=prevS>0?((r.streams-prevS)/prevS*100):null;
+      // isNewEntry = มี prev week แต่เพลงนี้ไม่เคยมียอดใน prev → ถือเป็น NEW จริงๆ
       const isNewEntry = hasPrev && prevS===0;
+      // Full history across all weeks
       const history=p2WeekData.map(wd=>{
         const entry=wd.songMap.get(r._key);
         return entry?entry.streams:null;
@@ -2150,7 +2123,7 @@ async function p2Run(){
     p2SP(100,''); await tick();
     p2RenderSummary();
     if(hasRankingData){
-      p2RenderChart(p2_data.slice(0,20), maxS);
+      p2RenderChart(p2_data, maxS);
       $('p2-chart').style.display='block';
       const noDataNotice = $('p2-no-ranking');
       if(noDataNotice) noDataNotice.style.display='none';
@@ -2172,7 +2145,6 @@ async function p2Run(){
     $('p2-prog').style.display='none'; $('p2-res').style.display='block';
     $('p2-rst').style.display='inline-flex'; $('p2-csv').style.display='inline-flex';
     p2SummaryNeedsRender = true;
-    p2UpdateLabelDropdown();
     // ── render timeline AFTER p2-res is visible ──────────────
     if(p2WeekData.length>1) p2RenderTimeline();
     stSaveP2();
@@ -2245,22 +2217,7 @@ function p2RenderTimeline(){
   if(!tbl) return;
   if(!p2_data.length||!p2WeekData.length){ p2TimelineHTML=''; tbl.innerHTML=''; return; }
   const q=($('p2-tl-search')||{value:''}).value.toLowerCase();
-  const labelF = p2GetLabelFilter();
-  let rows = p2_data;
-  if(q) rows=rows.filter(r=>r.name.toLowerCase().includes(q)||r.artist.toLowerCase().includes(q));
-  if(labelF) rows=rows.filter(r=>{
-    // หา label จาก latest songMap
-    const entry = p2WeekData.length ? p2WeekData[p2WeekData.length-1].songMap.get(r._key) : null;
-    return (entry?.label||r.label||'')=== labelF;
-  });
-  if(!q&&!labelF) rows=rows.slice(0,100);
-  // sum for label
-  const labelSumEl = $('p2-label-sum');
-  if(labelF && labelSumEl){
-    const sum = rows.reduce((s,r)=>s+(r.streams||0),0);
-    labelSumEl.innerHTML=`🏷 <b>${esc(labelF)}</b> · ${rows.length.toLocaleString()} เพลง · Σ ${fmt(sum)}`;
-    labelSumEl.style.display='block';
-  } else if(labelSumEl){ labelSumEl.style.display='none'; }
+  const rows=q ? p2_data.filter(r=>r.name.toLowerCase().includes(q)||r.artist.toLowerCase().includes(q)) : p2_data.slice(0,20);
   const labels=p2WeekData.map(w=>w.label);
 
   // ── Pre-compute rank maps O(WW × n log n) ──────────────────
@@ -2292,7 +2249,7 @@ function p2RenderTimeline(){
         else if(d<0) chg=`<span class="tl-chg dn">▼${Math.abs(d)}</span>`;
         else chg=`<span class="tl-chg" style="color:var(--fg3)">—</span>`;
       } else if(!prev){
-        chg=wi>0?'<span style="color:var(--gold);font-size:9px;font-weight:700">NEW</span>':'';
+        chg='<span style="color:var(--gold);font-size:9px;font-weight:700">NEW</span>';
       }
       const rkCls=wk.rank===1?'r1':wk.rank===2?'r2':wk.rank===3?'r3':'';
       return `<td><div class="tl-cell"><span class="tl-rank ${rkCls}">${wk.rank}</span><span class="tl-streams">${fmtK(wk.streams)}</span>${chg}</div></td>`;
@@ -2648,14 +2605,8 @@ async function p3Run(){
 
       // slot จาก storage ไม่มีไฟล์ใหม่ → ใช้ข้อมูลเดิม
       if(wk._fromStorage && !wk.file){
-        // match exact หรือ prefix (label อาจมี dateLabel ต่อท้าย)
-        const existing = p3WeekData.find(w=>
-          w.label===wk.label || wk.label.startsWith(w.label) || w.label.startsWith(wk.label)
-        );
+        const existing = p3WeekData.find(w=>w.label===wk.label);
         if(existing){ mergedWeekData.push(existing); continue; }
-        // fallback: ใช้ index
-        const byIdx = p3WeekData[i];
-        if(byIdx){ mergedWeekData.push(byIdx); continue; }
       }
       if(!wk.file) continue;
 
@@ -2756,7 +2707,7 @@ async function p3Run(){
     p3RenderChart(p3_rtData, 'rt');
     p3RenderChart(p3_sgData, 'sg');
     p3DrawDonut(rtTotal, sgTotal);
-    if(p3WeekData.length >= 1) p3RenderTimeline();
+    if(p3WeekData.length > 1) p3RenderTimeline();
 
     $('p3-prog').style.display='none'; $('p3-res').style.display='block';
     $('p3-rst').style.display='inline-flex'; $('p3-csv').style.display='inline-flex';
@@ -2851,7 +2802,7 @@ function p3RenderTimeline(){
       } else if(prev===null && wi===0){
         chg=''; // WW แรก ไม่ต้องแสดงอะไร
       } else if(prev===null){
-        chg=wi>0?'<span style="color:var(--gold);font-size:9px;font-weight:700">NEW</span>':'';
+        chg='<span style="color:var(--gold);font-size:9px;font-weight:700">NEW</span>';
       }
       return `<td><div class="tl-cell"><span class="tl-streams">${fmtK(u)}</span>${chg}</div></td>`;
     });
@@ -3376,21 +3327,12 @@ async function gsSave(key, data){
 
 async function gsLoad(key){
   if(!GS_URL) return null;
-  return new Promise((resolve)=>{
-    const cbName = '_gsCallback_'+Date.now();
-    const script = document.createElement('script');
-    let done = false;
-    const timeout = setTimeout(()=>{
-      if(!done){ done=true; delete window[cbName]; script.remove(); resolve(null); }
-    }, 10000);
-    window[cbName] = (data) => {
-      if(!done){ done=true; clearTimeout(timeout); delete window[cbName]; script.remove(); }
-      try{ resolve(data?.data ? JSON.parse(data.data) : null); }catch(e){ resolve(null); }
-    };
-    script.src = `${GS_URL}?key=${encodeURIComponent(key)}&callback=${cbName}`;
-    script.onerror = ()=>{ if(!done){ done=true; clearTimeout(timeout); delete window[cbName]; script.remove(); resolve(null); } };
-    document.head.appendChild(script);
-  });
+  try{
+    const resp = await fetch(`${GS_URL}?key=${key}`);
+    const json = await resp.json();
+    if(json.data) return JSON.parse(json.data);
+    return null;
+  }catch(e){ console.warn('gsLoad error:', e); return null; }
 }
 
 async function gsSyncAll(){
@@ -3460,11 +3402,10 @@ function stSave(key, data){
 function stUpsert(key, newEntry){
   let arr = stLoad(key);
   const idx = arr.findIndex(e => e.label === newEntry.label);
-  if(idx >= 0) arr[idx] = newEntry;
+  if(idx >= 0) arr[idx] = newEntry;           // overwrite
   else arr.push(newEntry);
-  // ใช้ buffer ใหญ่กว่า MAX_STORED เพื่อให้ stSaveP2 เป็นตัวตัดสุดท้าย
-  const buf = MAX_STORED * 2;
-  if(arr.length > buf) arr = arr.slice(arr.length - buf);
+  // sliding window: เก็บ 4 ล่าสุด
+  if(arr.length > MAX_STORED) arr = arr.slice(arr.length - MAX_STORED);
   stSave(key, arr);
 }
 
@@ -3476,65 +3417,33 @@ function stDelete(key, label){
 // ── P2: save weekData ──────────────────────────────────────────────
 function stSaveP2(){
   if(!p2WeekData.length) return;
-
-  const MAX_SONGS_STORED = 100;
-
-  // ── Build entries จาก p2WeekData ──────────────────────────
-  const newEntries = p2WeekData.map(wd => {
-    const topEntries = [...wd.songMap.entries()]
-      .sort((a,b)=>b[1].streams-a[1].streams)
-      .slice(0, MAX_SONGS_STORED);
-    return {
-      label: wd.label,
-      savedAt: new Date().toISOString(),
-      songMapArr: topEntries,
-      songCount: wd.songMap.size,
-      appleTotal: wd.appleTotal||0,
-      virginTotal: wd.virginTotal||0,
-      grandTotal: wd.grandTotal||0
-    };
+  const MAX_SONGS_STORED = 20;
+  const _e2 = p2WeekData.map(wd => {
+    const top = [...wd.songMap.entries()].sort((a,b)=>b[1].streams-a[1].streams).slice(0,MAX_SONGS_STORED);
+    return {label:wd.label,savedAt:new Date().toISOString(),songMapArr:top,
+      songCount:wd.songMap.size,appleTotal:wd.appleTotal||0,virginTotal:wd.virginTotal||0,grandTotal:wd.grandTotal||0};
   });
-
-  // ── Merge + Sliding window → save ครั้งเดียว ──────────────
-  // เอา old entries ที่ label ไม่ซ้ำกับ new + new entries
-  // ตัดเหลือ MAX_STORED รายการล่าสุด แล้ว save ทีเดียว
-  const existing = stLoad(SK.p2);
-  const newLabels = new Set(newEntries.map(e=>e.label));
-  let merged = [...existing.filter(e=>!newLabels.has(e.label)), ...newEntries];
-  if(merged.length > MAX_STORED) merged = merged.slice(merged.length - MAX_STORED);
-  stSave(SK.p2, merged);
-
-  // ── sync p2WeekData เฉพาะกรณี sliding window ตัดจริง ──────
-  const kept = new Set(merged.map(e=>e.label));
-  const droppedCount = p2WeekData.filter(w=>!kept.has(w.label)).length;
-  if(droppedCount > 0) p2WeekData = p2WeekData.filter(w=>kept.has(w.label));
-
-  // update p2_data ถ้ามีการ drop week (latest week อาจเปลี่ยน)
-  if(droppedCount>0 && p2WeekData.length){
+  const _x2=stLoad(SK.p2), _l2=new Set(_e2.map(e=>e.label));
+  let _a2=[..._x2.filter(e=>!_l2.has(e.label)),..._e2];
+  if(_a2.length>MAX_STORED) _a2=_a2.slice(_a2.length-MAX_STORED);
+  stSave(SK.p2,_a2);
+  const _k2=new Set(_a2.map(e=>e.label));
+  const droppedCount=p2WeekData.filter(w=>!_k2.has(w.label)).length;
+  if(droppedCount>0) p2WeekData=p2WeekData.filter(w=>_k2.has(w.label));
+  if(droppedCount>0&&p2WeekData.length){
     const latest=p2WeekData[p2WeekData.length-1];
     const sorted=[...latest.songMap.entries()].map(([k,d])=>({...d,_key:k})).sort((a,b)=>b.streams-a.streams);
-    // p2_data stores top 100 for timeline; chart uses first 20
-    p2_data=sorted.slice(0,100);
-    p2Data=p2_data;
-    p2Data=p2_data;
+    p2_data=sorted.slice(0,20); p2Data=p2_data;
   }
-
-  // ── rebuild p2Weeks slots: storage cards + 1 new empty slot ──
-  p2Weeks = p2WeekData.map(wd=>({
-    label: wd.label, wwFile:null, appleFile:null, virginFile:null, _fromStorage:true
-  }));
-  p2Weeks.push({label:'WW '+(p2Weeks.length+1), wwFile:null, appleFile:null, virginFile:null});
-  p2RenderWeekZones();
-  p2UpdateBtn();
-
-  // Gap #7: update KPI ถ้ามีการ drop week
-  if(droppedCount > 0){
-    const kpiSub = $('p2-kpis')?.querySelector('.k-sub:last-of-type');
-    if(kpiSub) kpiSub.textContent = p2WeekData.map(w=>w.label).join(' · ');
-    if(droppedCount > 0) toast(`📦 Sliding window: เก็บ ${p2WeekData.length} สัปดาห์ล่าสุด`);
+  p2Weeks=p2WeekData.map(wd=>({label:wd.label,wwFile:null,appleFile:null,virginFile:null,_fromStorage:true}));
+  p2Weeks.push({label:'WW '+(p2Weeks.length+1),wwFile:null,appleFile:null,virginFile:null});
+  p2RenderWeekZones(); p2UpdateBtn();
+  if(droppedCount>0){
+    const s=$('p2-kpis')?.querySelector('.k-sub:last-of-type');
+    if(s) s.textContent=p2WeekData.map(w=>w.label).join(' · ');
+    toast(`📦 Sliding window: เก็บ ${p2WeekData.length} สัปดาห์ล่าสุด`);
   }
 }
-
 function stLoadP2(){
   const arr = stLoad(SK.p2);
   if(!arr.length) return false;
@@ -3551,33 +3460,18 @@ function stLoadP2(){
 // ── P3: save week rows ─────────────────────────────────────────────
 function stSaveP3(){
   if(!p3WeekData.length) return;
-
-  // ── Build + Merge + Sliding window → save ครั้งเดียว ────────
-  const newEntries = p3WeekData.map(wd => ({
-    label: wd.label,
-    savedAt: new Date().toISOString(),
-    rows: wd.rows,
-    rowCount: wd.rows.length,
-    manualTotal: wd.manualTotal||null
-  }));
-  const existing = stLoad(SK.p3);
-  const newLabels = new Set(newEntries.map(e=>e.label));
-  let merged = [...existing.filter(e=>!newLabels.has(e.label)), ...newEntries];
-  if(merged.length > MAX_STORED) merged = merged.slice(merged.length - MAX_STORED);
-  stSave(SK.p3, merged);
-
-  // ── sync p3WeekData เฉพาะกรณี sliding window ตัดจริง ────────
-  const kept = new Set(merged.map(e=>e.label));
-  if(p3WeekData.some(w=>!kept.has(w.label)))
-    p3WeekData = p3WeekData.filter(w=>kept.has(w.label));
-
-  // ── rebuild p3Weeks slots ─────────────────────────────────────
-  p3Weeks = p3WeekData.map(wd=>({label:wd.label, file:null, _fromStorage:true}));
-  p3Weeks.push({label:'WW '+(p3Weeks.length+1), file:null});
-  p3RenderWeekZones();
-  p3UpdateBtn();
+  const _e3=p3WeekData.map(wd=>({label:wd.label,savedAt:new Date().toISOString(),
+    rows:wd.rows,rowCount:wd.rows.length,manualTotal:wd.manualTotal||null}));
+  const _x3=stLoad(SK.p3), _l3=new Set(_e3.map(e=>e.label));
+  let _a3=[..._x3.filter(e=>!_l3.has(e.label)),..._e3];
+  if(_a3.length>MAX_STORED) _a3=_a3.slice(_a3.length-MAX_STORED);
+  stSave(SK.p3,_a3);
+  const _k3=new Set(_a3.map(e=>e.label));
+  if(p3WeekData.some(w=>!_k3.has(w.label))) p3WeekData=p3WeekData.filter(w=>_k3.has(w.label));
+  p3Weeks=p3WeekData.map(wd=>({label:wd.label,file:null,_fromStorage:true}));
+  p3Weeks.push({label:'WW '+(p3Weeks.length+1),file:null});
+  p3RenderWeekZones(); p3UpdateBtn();
 }
-
 function stLoadP3(){
   const arr = stLoad(SK.p3);
   if(!arr.length) return false;
@@ -3742,7 +3636,7 @@ function stRestoreAll(){
     $('p1-csv').style.display='inline-flex';
     $('p1-xl').style.display='inline-flex';
     $('p1-save-mom').style.display='inline-flex';
-    p1.filter='all'; p1UpdateLabelDropdown(); p1Render();
+    p1.filter='all'; p1Render();
     const note = document.createElement('div');
     note.style.cssText='font-size:10px;color:var(--fg3);font-family:var(--mono);padding:4px 0 0 2px';
     note.textContent=`💾 โหลดจาก storage · บันทึกเมื่อ ${p1saved.savedAt ? new Date(p1saved.savedAt).toLocaleString('th-TH',{dateStyle:'short',timeStyle:'short'}) : '—'}`;
@@ -3782,7 +3676,7 @@ function stRestoreAll(){
       const latest=p2WeekData[p2WeekData.length-1];
       const prev=p2WeekData.length>1?p2WeekData[p2WeekData.length-2]:null;
       const sorted=[...latest.songMap.entries()].map(([k,d])=>({...d,_key:k})).sort((a,b)=>b.streams-a.streams);
-      const top20=sorted.slice(0,100); // top 100 สำหรับ Timeline
+      const top20=sorted.slice(0,20);
       let prevRankMap=new Map();
       if(prev){[...prev.songMap.entries()].sort((a,b)=>b[1].streams-a[1].streams).forEach(([k],i)=>prevRankMap.set(k,i+1));}
       const maxS=top20[0]?.streams||1, hasPrev=!!prev;
@@ -3793,7 +3687,6 @@ function stRestoreAll(){
         return {...r,rank,prevStreams:prevS,prevRank:prevRk,rankChange:rkChg,pctChange:pctChg,isNewEntry:hasPrev&&prevS===0};
       });
       p2Data=p2_data;
-      const chartData=p2_data.slice(0,20); // Chart ใช้แค่ Top 20
       const latestTotal=latest.grandTotal||0;
       const prevTotal=prev?(prev.grandTotal||0):null;
       const diff=prevTotal!==null?latestTotal-prevTotal:null;
@@ -3810,8 +3703,7 @@ function stRestoreAll(){
         ${diff!==null?`<div class="kpi ${diff>=0?'kpos':'kneg'}"><div class="k-lbl">📈 WOW CHANGE</div>
           <div class="k-val">${diff>=0?'+':''}${fmt(diff)}</div>
           <div class="k-sub">${pctWoW!==null?(pctWoW>=0?'+':'')+pctWoW.toFixed(1)+'%':''} ${esc(prev.label)} → ${esc(latest.label)}</div></div>`:''}`;
-      p2RenderSummary(); p2RenderChart(chartData, maxS);
-      p2UpdateLabelDropdown();
+      p2RenderSummary(); p2RenderChart(p2_data,maxS);
       $('p2-res').style.display='block';
       $('p2-rst').style.display='inline-flex'; $('p2-csv').style.display='inline-flex';
       // pre-render timeline ไว้เลย (container hidden แต่ข้อมูลพร้อม)
@@ -3850,7 +3742,6 @@ function stRestoreAll(){
           <div class="k-val">${fmt(grandTotal)}</div>
           <div class="k-sub">${p3WeekData.length} สัปดาห์ · ${p3WeekData.map(w=>esc(w.label)).join(' · ')}</div></div>`;
       p3RenderChart(p3_rtData,'rt'); p3RenderChart(p3_sgData,'sg'); p3DrawDonut(rtTotal,sgTotal);
-      if(p3WeekData.length>=1) p3RenderTimeline();
       $('p3-res').style.display='block';
       $('p3-rst').style.display='inline-flex'; $('p3-csv').style.display='inline-flex';
     }catch(e){console.warn('P3 restore error',e);}
@@ -4186,48 +4077,7 @@ function smSetStatus(type, msg){
   el.textContent = msg;
 }
 
-// ════════════════ LABEL FILTER ════════════════════════════════
-
-// ── populate dropdown จาก rows ────────────────────────────────
-function populateLabelDropdown(selId, rows, labelKey='label'){
-  const sel = $(selId); if(!sel) return;
-  const cur = sel.value;
-  const labels = [...new Set(rows.map(r=>r[labelKey]||'').filter(Boolean))].sort();
-  sel.innerHTML = '<option value="">🏷 ทุก Label</option>' +
-    labels.map(l=>`<option value="${esc(l)}"${l===cur?'selected':''}>${esc(l)}</option>`).join('');
-}
-
-// ── Phase 1 label filter ──────────────────────────────────────
-function p1GetLabelFilter(){ return ($('p1-label-sel')||{value:''}).value; }
-
-function p1UpdateLabelDropdown(){
-  populateLabelDropdown('p1-label-sel', p1.rows);
-}
-
-// ── Phase 2 label filter ──────────────────────────────────────
-function p2GetLabelFilter(){ return ($('p2-label-sel')||{value:''}).value; }
-
-function p2UpdateLabelDropdown(){
-  if(!p2_data||!p2_data.length) return;
-  // รวม labels จากทุก WW
-  const allLabels = new Set();
-  p2WeekData.forEach(wd=>[...wd.songMap.values()].forEach(v=>{ if(v.label) allLabels.add(v.label); }));
-  const sel = $('p2-label-sel'); if(!sel) return;
-  const cur = sel.value;
-  sel.innerHTML = '<option value="">🏷 ทุก Label</option>' +
-    [...allLabels].sort().map(l=>`<option value="${esc(l)}"${l===cur?'selected':''}>${esc(l)}</option>`).join('');
-}
-
-// ── Label sum bar ─────────────────────────────────────────────
-function showLabelSum(elId, rows, labelName, streamKey='streams'){
-  const el = $(elId); if(!el) return;
-  if(!labelName){ el.style.display='none'; return; }
-  const sum = rows.reduce((s,r)=>s+(r[streamKey]||0),0);
-  el.innerHTML = `🏷 <b>${esc(labelName)}</b> · ${rows.length.toLocaleString()} เพลง · Σ ${fmt(sum)}`;
-  el.style.display='block';
-}
-
-// ════════════════════════════════════════════════════════════════
+// ════════════════ EXPORT PPTX ════════════════════════════════
 async function exportPPTX(){
   const btn = $('ov-pptx-btn');
   if(btn){ btn.disabled=true; btn.textContent='⏳ กำลังสร้าง...'; }
