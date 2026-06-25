@@ -4101,7 +4101,7 @@ async function exportPPTX(){
       s1.addText('Top Stream Apple Music S-One',{x:1.5,y:0.25,w:10,h:0.5,fontSize:15,bold:true,color:C.dark,align:'center'});
 
       let totalPrev=0, totalLat=0;
-      const rows = p2_data.map((r,i)=>{
+      const rows = p2_data.slice(0,20).map((r,i)=>{
         const prev = prevWD.songMap.get(r._key)?.streams||0;
         const lat  = latWD.songMap.get(r._key)?.streams||0;
         totalPrev+=prev; totalLat+=lat;
@@ -4114,12 +4114,12 @@ async function exportPPTX(){
           {text:r.artist||'',options:{fill,fontSize:9,color:C.gray}},
           {text:fmt(prev),options:{fill,align:'right',fontSize:9,color:C.gray}},
           {text:fmt(lat), options:{fill,align:'right',fontSize:9,bold:true,color:C.dark}},
-          {text:(diff>=0?'-':'-')+fmt(Math.abs(diff)),options:{fill,align:'right',fontSize:9,color:diff>=0?C.green:C.red}},
+          {text:(diff>=0?'+ ':' - ')+fmt(Math.abs(diff)),options:{fill,align:'right',fontSize:9,color:diff>=0?C.green:C.red}},
           {text:fmtPct(pct),options:{fill,align:'right',fontSize:9,bold:true,color:pctColor(pct)}},
         ];
       });
       const td=totalLat-totalPrev; const tp=totalPrev>0?((td/totalPrev)*100).toFixed(2)+'%':'—';
-      const totRow=[['',' ',' ',fmt(totalPrev),fmt(totalLat),(td>=0?'-':'-')+fmt(Math.abs(td)),fmtPct(tp)].map((t,i)=>
+      const totRow=[['',' ',' ',fmt(totalPrev),fmt(totalLat),(td>=0?'+ ':' - ')+fmt(Math.abs(td)),fmtPct(tp)].map((t,i)=>
         ({text:t,options:{fill:{color:C.totalBg},align:i>2?'right':'left',bold:true,fontSize:9,color:i===6?pctColor(tp):C.dark}}))];
 
       s1.addTable([...hdrRow(['No','Name','Artist',prevLbl,latLbl,'Change','% Change']),...rows,...totRow],{
