@@ -3500,16 +3500,17 @@ function stSaveP2(){
   });
 
   // ── Sliding window: ตัด storage ให้เหลือแค่ MAX_STORED ──────
+  // ไม่ sync p2WeekData จาก storage เพราะ memory ถูกต้องเสมอ
+  // sync เฉพาะกรณี sliding window ตัดจริง (arr.length > MAX_STORED)
   let arr = stLoad(SK.p2);
+  let droppedCount = 0;
   if(arr.length > MAX_STORED){
     arr = arr.slice(arr.length - MAX_STORED);
     stSave(SK.p2, arr);
+    const kept = new Set(arr.map(e=>e.label));
+    droppedCount = p2WeekData.filter(w=>!kept.has(w.label)).length;
+    p2WeekData = p2WeekData.filter(w=>kept.has(w.label));
   }
-
-  // ── sync p2WeekData ให้ตรงกับ storage ──────────────────────
-  const kept = new Set(arr.map(e=>e.label));
-  const droppedCount = p2WeekData.filter(w=>!kept.has(w.label)).length;
-  p2WeekData = p2WeekData.filter(w=>kept.has(w.label));
 
   // update p2_data ถ้ามีการ drop week (latest week อาจเปลี่ยน)
   if(droppedCount>0 && p2WeekData.length){
