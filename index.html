@@ -3806,7 +3806,7 @@ function renderOverview(){
     html+=`<div class="ov-section">
       <div class="ov-sec-title"><span class="ov-phase-badge" style="background:rgba(37,99,235,.1);color:var(--blue);border:1px solid rgba(37,99,235,.2)">รายงานรวม</span>รายงานรวม Apple + Virgin</div>
       <div class="ov-grid">
-        <div class="ov-kpi"><div class="lbl">Grand Total</div><div class="val" style="color:var(--fg)">${fmt(total)}</div><div class="sub">${p1.rows.length.toLocaleString()} รายการ</div></div>
+        <div class="ov-kpi"><div class="lbl">Grand Total</div><div class="val" style="color:var(--fg)">${fmt(aTotal+vTotal)}</div><div class="sub">${p1.rows.length.toLocaleString()} รายการ</div></div>
         <div class="ov-kpi"><div class="lbl">Apple</div><div class="val" style="color:var(--blue)">${fmt(aTotal)}</div><div class="sub">${p1.rows.filter(r=>r.source==='apple').length} เพลง</div></div>
         <div class="ov-kpi"><div class="lbl">Virgin</div><div class="val" style="color:var(--teal)">${fmt(vTotal)}</div><div class="sub">${p1.rows.filter(r=>r.source==='virgin').length.toLocaleString()} เพลง</div></div>
       </div>
