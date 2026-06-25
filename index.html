@@ -669,6 +669,10 @@ td.src{text-align:center;width:110px} td.art{color:var(--fg2)}
         style="height:32px;font-size:12px;padding:0 14px">
         📈 Timeline Track
       </button>
+      <button class="btn btn-ghost" id="p2-st3" onclick="p2SubTab(3)"
+        style="height:32px;font-size:12px;padding:0 14px">
+        🏷 Label
+      </button>
     </div>
 
     <div class="acts">
@@ -710,6 +714,21 @@ td.src{text-align:center;width:110px} td.art{color:var(--fg2)}
             <span style="font-size:11px;color:var(--fg3)">แสดงเฉพาะเพลงที่ค้นหา หรือเว้นว่างเพื่อดู Top 20</span>
           </div>
           <div id="p2-timeline-table" style="overflow-x:auto"></div>
+        </div>
+      </div>
+
+      <!-- Sub-view 3: Label -->
+      <div id="p2-view-label" style="display:none">
+        <div class="panel" style="padding:1rem">
+          <div style="display:flex;gap:10px;align-items:center;margin-bottom:12px;flex-wrap:wrap">
+            <select id="p2-label-sel" onchange="p2RenderLabel()"
+              style="height:34px;padding:0 10px;border-radius:var(--r-sm);border:1.5px solid var(--line2);
+              background:var(--bg2);color:var(--fg);font-size:12px;font-family:var(--thai);cursor:pointer">
+              <option value="">🏷 เลือก Label</option>
+            </select>
+            <span id="p2-label-count" style="font-size:11px;color:var(--fg3)"></span>
+          </div>
+          <div id="p2-label-table" style="overflow-x:auto"></div>
         </div>
       </div>
     </div>
@@ -1022,24 +1041,25 @@ function parseVirgin(file){
         if(iS<0) throw new Error('Virgin: ไม่พบคอลัมน์ Song Name');
         // Use "Song Name \x00 Artist" as composite key to prevent
         // same-name different-artist songs from being merged (e.g. covers)
-        const qmap=new Map(); // key→qty, key→{name,art}
-        const metaMap=new Map();
+        const iL=hdr.findIndex(h=>/label.?name/i.test(h)||/^label$/i.test(h));
+        const qmap=new Map(); // key→qty
+        const metaMap=new Map(); // key→{name,art,label}
         for(let i=1;i<lines.length;i++){
           if(!lines[i].trim()) continue;
           const cols=pRow(lines[i]);
           const song=(cols[iS]||'').trim();
           const art=iA>=0?(cols[iA]||'').trim():'';
           const qty=parseInt(cols[iQ]||'0',10);
+          const lbl=iL>=0?(cols[iL]||'').trim():'';
           if(!song||isNaN(qty)||qty<=0) continue;
-          // composite key: song name + artist (case-insensitive artist normalise)
           const key=song+'\x00'+art.toLowerCase();
           qmap.set(key,(qmap.get(key)||0)+qty);
-          if(!metaMap.has(key)) metaMap.set(key,{name:song,artist:art});
+          if(!metaMap.has(key)) metaMap.set(key,{name:song,artist:art,label:lbl});
         }
         const rows=[];
         for(const [key,streams] of qmap){
           const m=metaMap.get(key)||{};
-          rows.push({name:m.name||'',artist:m.artist||'',streams});
+          rows.push({name:m.name||'',artist:m.artist||'',streams,label:m.label||''});
         }
         res({rows,total:[...qmap.values()].reduce((s,v)=>s+v,0)});
       }catch(err){rej(err);}
@@ -1904,16 +1924,18 @@ function p2SubTab(n){
   $('p2-view-summary').style.display  = n===0?'block':'none';
   $('p2-view-top20').style.display    = n===1?'block':'none';
   $('p2-view-timeline').style.display = n===2?'block':'none';
+  $('p2-view-label').style.display    = n===3?'block':'none';
   const styles=[
     'height:32px;font-size:12px;padding:0 14px;background:var(--teal);color:#fff;border:none',
     'height:32px;font-size:12px;padding:0 14px;background:var(--blue);color:#fff;border:none',
-    'height:32px;font-size:12px;padding:0 14px;background:var(--violet);color:#fff;border:none'
+    'height:32px;font-size:12px;padding:0 14px;background:var(--violet);color:#fff;border:none',
+    'height:32px;font-size:12px;padding:0 14px;background:#b45309;color:#fff;border:none'
   ];
   const off='height:32px;font-size:12px;padding:0 14px;background:transparent;color:var(--fg2);border:1px solid var(--line2)';
-  ['p2-st0','p2-st1','p2-st2'].forEach((id,j)=>$(id).style.cssText=n===j?styles[j]:off);
+  ['p2-st0','p2-st1','p2-st2','p2-st3'].forEach((id,j)=>$(id).style.cssText=n===j?styles[j]:off);
   if(n===0){ p2RenderSummary(); p2SummaryNeedsRender=false; }
-  // inject timeline HTML เมื่อ tab เปิด (container visible แล้ว)
   if(n===2) p2ShowTimeline();
+  if(n===3) p2UpdateLabelDropdown();
 }
 
 async function p2Run(){
@@ -1972,7 +1994,13 @@ async function p2Run(){
       if(wk.virginFile){
         const r=await parseVirgin(wk.virginFile);
         virginTotal=r.total||0;
-        r.rows.forEach(x=>{if(!x.name)return;const k=mkKey(x.name,x.artist);const ex=songMap.get(k);if(ex){ex.streams+=x.streams;}else songMap.set(k,{name:x.name,artist:x.artist,streams:x.streams});});
+        r.rows.forEach(x=>{
+          if(!x.name) return;
+          const k=mkKey(x.name,x.artist);
+          const ex=songMap.get(k);
+          if(ex){ ex.streams+=x.streams; if(!ex.label&&x.label) ex.label=x.label; }
+          else songMap.set(k,{name:x.name,artist:x.artist,streams:x.streams,label:x.label||''});
+        });
       }
       const grandTotal=appleTotal+virginTotal;
       if(grandTotal>0 || songMap.size>0){
@@ -2071,6 +2099,7 @@ async function p2Run(){
     p2SummaryNeedsRender = true;
     // ── render timeline AFTER p2-res is visible ──────────────
     if(p2WeekData.length>1) p2RenderTimeline();
+    p2UpdateLabelDropdown();
     stSaveP2();
     toast(`✅ WW Streams · ${p2WeekData.length} สัปดาห์ · Total ${fmt(latestTotal)} streams`);
   }catch(err){ $('p2-err').textContent='⚠ '+err.message; $('p2-prog').style.display='none'; console.error(err); }
@@ -3339,6 +3368,98 @@ function stDelete(key, label){
 }
 
 // ── P2: save weekData ──────────────────────────────────────────────
+// ── Label Filter Functions ────────────────────────────────────────
+function p2UpdateLabelDropdown(){
+  const sel=$('p2-label-sel'); if(!sel) return;
+  const cur=sel.value;
+  const allLabels=new Set();
+  p2WeekData.forEach(wd=>[...wd.songMap.values()].forEach(v=>{ if(v.label) allLabels.add(v.label); }));
+  sel.innerHTML='<option value="">🏷 ทุก Label</option>'+
+    [...allLabels].sort().map(l=>`<option value="${l}"${l===cur?' selected':''}>${l}</option>`).join('');
+  p2RenderLabel();
+}
+
+function p2RenderLabel(){
+  const sel=$('p2-label-sel'); if(!sel) return;
+  const lbl=sel.value;
+  const tbl=$('p2-label-table');
+  const cnt=$('p2-label-count');
+  if(!lbl||!p2WeekData.length){ tbl.innerHTML=''; cnt.textContent=''; return; }
+
+  // ใช้ Prev WW และ Curr WW (2 สัปดาห์ล่าสุด)
+  const prevWD=p2WeekData.length>=2?p2WeekData[p2WeekData.length-2]:null;
+  const latWD=p2WeekData[p2WeekData.length-1];
+
+  // รวมเพลงทุก WW ที่ label ตรง
+  const allKeys=new Set();
+  p2WeekData.forEach(wd=>[...wd.songMap.entries()].forEach(([k,v])=>{ if(v.label===lbl) allKeys.add(k); }));
+
+  const rows=[...allKeys].map(k=>{
+    const v=latWD.songMap.get(k);
+    const curr=v?.streams||0;
+    const prev=prevWD?.songMap.get(k)?.streams||0;
+    const name=v?.name||k.split('\x00')[0];
+    const artist=v?.artist||'';
+    return {name,artist,curr,prev};
+  }).filter(r=>r.curr>0||r.prev>0)
+    .sort((a,b)=>b.curr-a.curr);
+
+  cnt.textContent=`${rows.length} เพลง`;
+
+  const fmt=n=>n>0?n.toLocaleString():'-';
+  const diffColor=d=>d>0?'color:#15803d':d<0?'color:#dc2626':'color:#888';
+  const fmtDiff=d=>d===0?'—':(d>0?'+ ':'- ')+Math.abs(d).toLocaleString();
+
+  const prevLbl=prevWD?.label||'Prev WW';
+  const latLbl=latWD.label;
+
+  // sum total
+  const sumCurr=rows.reduce((s,r)=>s+r.curr,0);
+  const sumPrev=rows.reduce((s,r)=>s+r.prev,0);
+  const sumDiff=sumCurr-sumPrev;
+  const sumPct=sumPrev>0?((sumDiff/sumPrev)*100).toFixed(2)+'%':'—';
+
+  tbl.innerHTML=`
+  <table style="width:100%;border-collapse:collapse;font-size:12px">
+    <thead>
+      <tr style="background:var(--bg3);color:var(--fg2);text-align:right">
+        <th style="text-align:left;padding:6px 8px;width:40px">#</th>
+        <th style="text-align:left;padding:6px 8px">เพลง</th>
+        <th style="text-align:left;padding:6px 8px">ศิลปิน</th>
+        <th style="padding:6px 8px">${prevLbl}</th>
+        <th style="padding:6px 8px">${latLbl}</th>
+        <th style="padding:6px 8px">Change</th>
+        <th style="padding:6px 8px">% Change</th>
+      </tr>
+    </thead>
+    <tbody>
+      ${rows.map((r,i)=>{
+        const d=r.curr-r.prev;
+        const pct=r.prev>0?((d/r.prev)*100).toFixed(2)+'%':'NEW';
+        const bg=i%2===0?'':'background:var(--bg2)';
+        return `<tr style="${bg}">
+          <td style="padding:5px 8px;color:var(--fg3);text-align:center">${i+1}</td>
+          <td style="padding:5px 8px;font-weight:600;color:var(--fg)">${r.name}</td>
+          <td style="padding:5px 8px;color:var(--fg2)">${r.artist}</td>
+          <td style="padding:5px 8px;text-align:right;color:var(--fg2)">${fmt(r.prev)}</td>
+          <td style="padding:5px 8px;text-align:right;font-weight:700">${fmt(r.curr)}</td>
+          <td style="padding:5px 8px;text-align:right;${diffColor(d)}">${fmtDiff(d)}</td>
+          <td style="padding:5px 8px;text-align:right;font-weight:700;${diffColor(d)}">${pct}</td>
+        </tr>`;
+      }).join('')}
+    </tbody>
+    <tfoot>
+      <tr style="background:var(--blue-soft);font-weight:700;border-top:2px solid var(--line2)">
+        <td colspan="3" style="padding:6px 8px;color:var(--fg)">รวม ${rows.length} เพลง</td>
+        <td style="padding:6px 8px;text-align:right">${sumPrev.toLocaleString()}</td>
+        <td style="padding:6px 8px;text-align:right">${sumCurr.toLocaleString()}</td>
+        <td style="padding:6px 8px;text-align:right;${diffColor(sumDiff)}">${fmtDiff(sumDiff)}</td>
+        <td style="padding:6px 8px;text-align:right;${diffColor(sumDiff)}">${sumPct}</td>
+      </tr>
+    </tfoot>
+  </table>`;
+}
+
 function stSaveP2(){
   if(!p2WeekData.length) return;
 
@@ -4267,6 +4388,50 @@ async function exportPPTX(){
          {text:(s6Diff>=0?'+ ':'- ')+fmt(Math.abs(s6Diff)),options:{fill:{color:C.white},align:'right',fontSize:10,color:s6Diff>=0?C.green:C.red}},
          {text:s6PrevTotal>0?s6Pct.toFixed(2)+'%':'—',options:{fill:{color:C.white},align:'right',bold:true,fontSize:10,color:s6Diff>=0?C.green:C.red}}],
       ],{x:2.5,y:5.9,w:8.3,colW:[2.0,1.8,1.8,1.5,1.2],border:{type:'solid',pt:0.5,color:'DDDDDD'},rowH:0.28});
+    }
+
+    // ── SLIDE: Label Top 20 (ถ้ามี label ถูกเลือก) ─────────────
+    const selLabel = ($('p2-label-sel')?.value)||'';
+    if(selLabel && p2WeekData.length>=2){
+      const prevWD=p2WeekData[p2WeekData.length-2];
+      const latWD=p2WeekData[p2WeekData.length-1];
+      const allKeys=new Set();
+      p2WeekData.forEach(wd=>[...wd.songMap.entries()].forEach(([k,v])=>{ if(v.label===selLabel) allKeys.add(k); }));
+      const labelRows=[...allKeys].map(k=>{
+        const v=latWD.songMap.get(k);
+        const curr=v?.streams||0;
+        const prev=prevWD.songMap.get(k)?.streams||0;
+        return {name:v?.name||k.split(' ')[0],artist:v?.artist||'',curr,prev};
+      }).filter(r=>r.curr>0||r.prev>0).sort((a,b)=>b.curr-a.curr).slice(0,20);
+
+      if(labelRows.length){
+        const sL=pres.addSlide(); addBg(sL);
+        sL.addText(`Top Stream · ${selLabel}`,{x:1.5,y:0.25,w:10,h:0.5,fontSize:15,bold:true,color:C.dark,align:'center'});
+        let tLP=0,tLC=0;
+        const lRows=labelRows.map((r,i)=>{
+          tLP+=r.prev; tLC+=r.curr;
+          const diff=r.curr-r.prev;
+          const pct=r.prev>0?((diff/r.prev)*100).toFixed(2)+'%':'NEW';
+          const fill={color:i%2===0?C.white:C.rowAlt};
+          return [
+            {text:String(i+1),options:{fill,align:'center',fontSize:9,color:C.gray}},
+            {text:r.name,options:{fill,fontSize:9,color:C.dark}},
+            {text:r.artist,options:{fill,fontSize:9,color:C.gray}},
+            {text:r.prev>0?fmt(r.prev):'-',options:{fill,align:'right',fontSize:9,color:C.gray}},
+            {text:fmt(r.curr),options:{fill,align:'right',fontSize:9,bold:true,color:C.dark}},
+            {text:(diff>=0?'+ ':'- ')+fmt(Math.abs(diff)),options:{fill,align:'right',fontSize:9,color:diff>=0?C.green:C.red}},
+            {text:fmtPct(pct),options:{fill,align:'right',fontSize:9,bold:true,color:pctColor(pct)}},
+          ];
+        });
+        const lDiff=tLC-tLP;
+        const lPct=tLP>0?((lDiff/tLP)*100).toFixed(2)+'%':'—';
+        const totLRow=[['',' ',' ',fmt(tLP),fmt(tLC),(lDiff>=0?'+ ':'- ')+fmt(Math.abs(lDiff)),fmtPct(lPct)].map((t,i)=>
+          ({text:t,options:{fill:{color:C.totalBg},align:i>2?'right':'left',bold:true,fontSize:9,color:i===6?pctColor(lPct):C.dark}}))];
+        sL.addTable([...hdrRow(['No','Name','Artist',prevWD.label,latWD.label,'Change','% Change']),...lRows,...totLRow],{
+          x:0.35,y:0.85,w:12.5,colW:[0.5,4.0,2.5,1.5,1.6,1.2,1.2],
+          border:{type:'solid',pt:0.3,color:'DDDDDD'},rowH:0.25,
+        });
+      }
     }
 
     // ── Download ─────────────────────────────────────────────
