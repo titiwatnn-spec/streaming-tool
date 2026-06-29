@@ -1374,18 +1374,42 @@ function p1SaveMoM(){
 }
 
 // ── Load/Save MoM ──────────────────────────────────────────────
-function p1MoMLoad(){ try{return JSON.parse(localStorage.getItem(SK_MOM)||'[]');}catch(e){return[];} }
-function p1MoMSave(arr){ try{localStorage.setItem(SK_MOM,JSON.stringify(arr));}catch(e){toast('⚠ Storage เต็ม');} }
+// momArr = ข้อมูลเต็มใน memory (ตัวจริง) · Google Drive = durable store (เก็บ 12 เดือน ไม่หาย)
+// · localStorage = แค่ cache (ถ้าไม่พอจะเก็บแค่ totals)
+let momArr = null;
+function p1MoMLoad(){
+  if(momArr===null){ try{ momArr = JSON.parse(localStorage.getItem(SK_MOM)||'[]'); }catch(e){ momArr=[]; } }
+  return momArr;
+}
+function p1MoMCacheLocal(){
+  // ลองเก็บเต็มก่อน ถ้า localStorage เต็ม → เก็บแค่ totals (chart ยังทำงาน · rows อยู่บน Drive/memory)
+  try{ localStorage.setItem(SK_MOM, JSON.stringify(momArr||[])); }
+  catch(e){
+    try{ localStorage.setItem(SK_MOM, JSON.stringify((momArr||[]).map(m=>({label:m.label,apple:m.apple,virgin:m.virgin,total:m.total,savedAt:m.savedAt})))); }
+    catch(e2){ console.warn('MoM cache failed:',e2); }
+  }
+}
+function p1MoMPushDrive(){
+  if(!GS_URL || momArr===null) return;
+  gsSave('p1_mom', JSON.stringify(momArr));   // async fire-and-forget — กันข้อมูลหายตั้งแต่กดบันทึก
+}
+function p1MoMSave(arr){
+  momArr = arr||[];
+  p1MoMCacheLocal();
+  p1MoMPushDrive();
+}
 function p1MoMUpsert(entry){
   let arr = p1MoMLoad();
   const idx = arr.findIndex(e=>e.label===entry.label);
   if(idx>=0) arr[idx]=entry; else arr.push(entry);
-  if(arr.length>MAX_MOM) arr=arr.slice(arr.length-MAX_MOM);
+  if(arr.length>MAX_MOM) arr=arr.slice(arr.length-MAX_MOM);   // sliding window 12 เดือน
   p1MoMSave(arr);
 }
 function p1ClearMoM(){
   if(!confirm('ล้างข้อมูล MoM ทั้งหมด?')) return;
+  momArr = [];
   localStorage.removeItem(SK_MOM);
+  p1MoMPushDrive();   // ล้างบน Drive ด้วย
   p1RenderMoM();
   toast('🗑 ล้างข้อมูล MoM แล้ว');
 }
@@ -2192,7 +2216,9 @@ function p2RenderTimeline(){
   p2WeekData.forEach(wd=>wd.songMap.forEach((v,k)=>{ if(!seen.has(k)) seen.set(k,{_key:k,name:v.name||k.split('\x00')[0],artist:v.artist||''}); }));
   const latSM=p2WeekData[p2WeekData.length-1].songMap;
   let rows=[...seen.values()].sort((a,b)=>((latSM.get(b._key)?.streams||0)-(latSM.get(a._key)?.streams||0)));
+  // ค้นหา = โชว์ทุกผลลัพธ์, ไม่ค้นหา = โชว์ top 200 (กันเบราว์เซอร์ค้าง)
   if(q) rows=rows.filter(r=>r.name.toLowerCase().includes(q)||(r.artist||'').toLowerCase().includes(q));
+  else rows=rows.slice(0,200);
   const labels=p2WeekData.map(w=>w.label);
 
   // ── Pre-compute rank maps O(WW × n log n) ──────────────────
@@ -3318,18 +3344,24 @@ async function gsSyncAll(){
   toast('📤 กำลัง Sync ข้อมูลไปยัง Google Sheets...');
   try{
     const tasks = [];
+    // ทุกแท็บ: ดัน "ข้อมูลเต็มจาก memory" ขึ้น Drive (ไม่ใช่ตัวที่อาจถูก cap ใน localStorage)
     // P1 rows
-    const p1raw = (() => { try{ return localStorage.getItem(SK.p1); }catch(e){return null;} })();
-    if(p1raw) tasks.push(gsSave('p1_rows', p1raw));
-    // P1 MoM
-    const momraw = localStorage.getItem(SK_MOM);
-    if(momraw) tasks.push(gsSave('p1_mom', momraw));
-    // P2
-    const p2raw = localStorage.getItem(SK.p2);
-    if(p2raw) tasks.push(gsSave('p2', p2raw));
+    const p1full = (p1.rows&&p1.rows.length)
+      ? JSON.stringify({rows:p1.rows, apple:p1.aTotal||0, virgin:p1.vTotal||0, savedAt:new Date().toISOString()})
+      : (()=>{ try{ return localStorage.getItem(SK.p1); }catch(e){return null;} })();
+    if(p1full) tasks.push(gsSave('p1_rows', p1full));
+    // P1 MoM — เต็มจาก memory (12 เดือน)
+    const momFull = (momArr&&momArr.length) ? JSON.stringify(momArr) : localStorage.getItem(SK_MOM);
+    if(momFull) tasks.push(gsSave('p1_mom', momFull));
+    // P2 — เต็มจาก memory
+    const p2full = p2WeekData.length ? JSON.stringify(p2BuildArr(0)) : localStorage.getItem(SK.p2);
+    if(p2full) tasks.push(gsSave('p2', p2full));
     // P3
     const p3raw = localStorage.getItem(SK.p3);
     if(p3raw) tasks.push(gsSave('p3', p3raw));
+    // P4 — เพิ่มเข้า sync (เดิมไม่ sync)
+    const p4raw = localStorage.getItem(SK.p4);
+    if(p4raw) tasks.push(gsSave('p4', p4raw));
 
     await Promise.all(tasks);
     toast('✅ Sync สำเร็จ — ข้อมูลอยู่ใน Google Sheets แล้ว');
@@ -3345,16 +3377,29 @@ async function gsRestoreAll(){
   if(btn){ btn.disabled=true; btn.textContent='⏳ กำลังโหลด...'; }
   toast('📥 กำลังโหลดข้อมูลจาก Google Sheets...');
   try{
-    const [p1rows, p1mom, p2, p3] = await Promise.all([
-      gsLoad('p1_rows'), gsLoad('p1_mom'), gsLoad('p2'), gsLoad('p3')
+    const [p1rows, p1mom, p2, p3, p4] = await Promise.all([
+      gsLoad('p1_rows'), gsLoad('p1_mom'), gsLoad('p2'), gsLoad('p3'), gsLoad('p4')
     ]);
     let count = 0;
     if(p1rows){ localStorage.setItem(SK.p1, typeof p1rows==='string'?p1rows:JSON.stringify(p1rows)); count++; }
-    if(p1mom){  localStorage.setItem(SK_MOM, typeof p1mom==='string'?p1mom:JSON.stringify(p1mom)); count++; }
-    if(p2){     localStorage.setItem(SK.p2, typeof p2==='string'?p2:JSON.stringify(p2)); count++; }
     if(p3){     localStorage.setItem(SK.p3, typeof p3==='string'?p3:JSON.stringify(p3)); count++; }
+    if(p4){     localStorage.setItem(SK.p4, typeof p4==='string'?p4:JSON.stringify(p4)); count++; }
+    // MoM — โหลด "เต็ม" จาก Drive เข้า memory (ไม่ยัดเต็มลง localStorage เพราะ 12 เดือนอาจเกิน quota)
+    if(p1mom){ try{ momArr = typeof p1mom==='string'? JSON.parse(p1mom) : p1mom; p1MoMCacheLocal(); count++; }catch(e){ console.warn('mom parse',e); } }
+    // P2 — โหลด "เต็ม" จาก Drive เข้า memory ตรง ๆ
+    let p2arr = null;
+    if(p2){ try{ p2arr = typeof p2==='string'? JSON.parse(p2) : p2; count++; }catch(e){ console.warn('p2 parse',e); } }
     toast(`✅ โหลดจาก Google Sheets สำเร็จ (${count} keys) — กำลัง Restore...`);
-    setTimeout(()=>{ stRestoreAll(); renderStorage(); }, 500);
+    setTimeout(()=>{
+      stRestoreAll();   // restore P1/P3/P4 + render MoM จาก memory
+      if(p2arr){
+        p2WeekData = p2ArrToWeekData(p2arr);   // ข้อมูลเต็มเข้า memory
+        try{ p2CacheLocal(); }catch(e){}        // cache ย่อลง localStorage (best-effort)
+        p2RenderRestored();                     // render จากข้อมูลเต็ม
+      }
+      p1RenderMoM();                            // render MoM จาก momArr (เต็ม)
+      renderStorage();
+    }, 500);
   }catch(e){
     toast('❌ โหลดล้มเหลว: ' + e.message);
   }
@@ -3486,54 +3531,74 @@ function p2RenderLabel(){
   </table>`;
 }
 
-function stSaveP2(){
-  if(!p2WeekData.length) return;
-
-  // เก็บ "ทุกเพลง" ต่อสัปดาห์ แบบ compact tuple [name, artist, streams, label]
-  // (เดิมเก็บแค่ Top 100 ตาม stream รวม → ทำให้ Label tracking ไม่ครบ:
-  //  เพลงของ label เล็กที่ stream ต่ำกว่าอันดับ 100 ของทั้งระบบจะหายหมด)
-  // ถ้า localStorage เต็ม จะลดจำนวนเพลง/สัปดาห์ลงอัตโนมัติทีละขั้น
-  const buildEntries = (wd, cap) => {
+// ── P2 storage helpers ─────────────────────────────────────────────
+// Google Drive = แหล่งข้อมูลจริง (เก็บ "ทุกเพลง" ไม่จำกัด) · localStorage = แค่ cache (cap ได้)
+// serialize p2WeekData → array (compact tuple [name,artist,streams,vLabels])
+// cap=0 = ทุกเพลง (ใช้กับ Drive), cap>0 = top N ตาม streams (ใช้กับ localStorage ที่จำกัด)
+function p2BuildArr(cap){
+  const buildEntries = wd => {
     let ents = [...wd.songMap.entries()];
     if(cap) ents = ents.sort((a,b)=>b[1].streams-a[1].streams).slice(0, cap);
     return ents.map(([,v])=>[v.name||'', v.artist||'', v.streams||0, v.vLabels||null]);
   };
+  return p2WeekData.map(wd=>({
+    label: wd.label,
+    savedAt: new Date().toISOString(),
+    songMapArr: buildEntries(wd),
+    songCount: wd.songMap.size,
+    appleTotal: wd.appleTotal||0,
+    virginTotal: wd.virginTotal||0,
+    grandTotal: wd.grandTotal||0
+  }));
+}
 
-  let arr = null;
-  for(const cap of [0, 4000, 2000, 1000, 300, 100]){   // 0 = เก็บทุกเพลง
+// array → p2WeekData (รองรับ format ใหม่ [name,artist,streams,vLabels] + เก่า)
+function p2ArrToWeekData(arr){
+  const mk = (n,a) => n + '\x00' + (a||'').toLowerCase();
+  return (arr||[]).map(e => {
+    const m = new Map();
+    (e.songMapArr||[]).forEach(row => {
+      if(!Array.isArray(row)) return;
+      if(row[1] && typeof row[1]==='object' && !Array.isArray(row[1]) && ('streams' in row[1] || 'name' in row[1])){
+        const v=row[1];
+        if(!v.vLabels) v.vLabels = v.label ? {[v.label]: (v.streams||0)} : {};
+        m.set(row[0], v);
+      } else if(typeof row[1]==='number'){
+        m.set(row[0], {streams:row[1], vLabels:{}});
+      } else {
+        const [n,a,s,vl] = row;
+        m.set(mk(n,a), {name:n, artist:a, streams:s||0, vLabels: (vl && typeof vl==='object')?vl:{}});
+      }
+    });
+    return { label:e.label, songMap:m, appleTotal:e.appleTotal||0, virginTotal:e.virginTotal||0, grandTotal:e.grandTotal||0 };
+  });
+}
+
+// เขียน cache ลง localStorage (ลด cap อัตโนมัติถ้าเต็ม) — ข้อมูลเต็มอยู่บน Drive แล้ว
+function p2CacheLocal(){
+  for(const cap of [0, 4000, 2000, 1000, 300, 100]){
+    const built = p2BuildArr(cap);
     let next = stLoad(SK.p2);
-    p2WeekData.forEach(wd => {
-      const entry = {
-        label: wd.label,
-        savedAt: new Date().toISOString(),
-        songMapArr: buildEntries(wd, cap),
-        songCount: wd.songMap.size,
-        appleTotal: wd.appleTotal||0,
-        virginTotal: wd.virginTotal||0,
-        grandTotal: wd.grandTotal||0
-      };
-      const idx = next.findIndex(e=>e.label===entry.label);   // overwrite ถ้า label ซ้ำ
+    built.forEach(entry=>{
+      const idx = next.findIndex(e=>e.label===entry.label);
       if(idx>=0) next[idx]=entry; else next.push(entry);
     });
-    if(next.length > MAX_STORED) next = next.slice(next.length - MAX_STORED); // เก็บ N ล่าสุด
-    try{
-      localStorage.setItem(SK.p2, JSON.stringify(next));
-      arr = next;
-      if(cap) toast(`⚠ Storage จำกัด — เก็บ ${cap.toLocaleString()} เพลง/สัปดาห์ (Label อาจไม่ครบ)`);
-      break;
-    }catch(e){
-      if(!(e.name==='QuotaExceededError'||e.code===22)){ console.error('stSaveP2:',e); break; }
-      // localStorage เต็ม → ลองรอบถัดไปด้วย cap ที่เล็กลง
-    }
+    if(next.length > MAX_STORED) next = next.slice(next.length - MAX_STORED);
+    try{ localStorage.setItem(SK.p2, JSON.stringify(next)); return next; }
+    catch(e){ if(!(e.name==='QuotaExceededError'||e.code===22)){ console.error('p2CacheLocal:',e); return stLoad(SK.p2); } }
   }
-  if(!arr){ toast('⚠ Storage เต็ม — ลบข้อมูลเก่าใน tab 🗄 Storage แล้วลองใหม่'); arr = stLoad(SK.p2); }
+  return stLoad(SK.p2);
+}
 
-  // ── sync p2WeekData ให้ตรงกับ storage ──────────────────────
+function stSaveP2(){
+  if(!p2WeekData.length) return;
+  const arr = p2CacheLocal();
+
+  // ── sliding window: localStorage เก็บ MAX_STORED สัปดาห์ ──────
   const kept = new Set(arr.map(e=>e.label));
   const droppedCount = p2WeekData.filter(w=>!kept.has(w.label)).length;
   p2WeekData = p2WeekData.filter(w=>kept.has(w.label));
 
-  // update p2_data ถ้ามีการ drop week (latest week อาจเปลี่ยน)
   if(droppedCount>0 && p2WeekData.length){
     const latest=p2WeekData[p2WeekData.length-1];
     const sorted=[...latest.songMap.entries()].map(([k,d])=>({...d,_key:k})).sort((a,b)=>b.streams-a.streams);
@@ -3541,50 +3606,22 @@ function stSaveP2(){
     p2Data=p2_data;
   }
 
-  // ── rebuild p2Weeks slots: storage cards + 1 new empty slot ──
-  p2Weeks = p2WeekData.map(wd=>({
-    label: wd.label, wwFile:null, appleFile:null, virginFile:null, _fromStorage:true
-  }));
+  p2Weeks = p2WeekData.map(wd=>({ label: wd.label, wwFile:null, appleFile:null, virginFile:null, _fromStorage:true }));
   p2Weeks.push({label:'WW '+(p2Weeks.length+1), wwFile:null, appleFile:null, virginFile:null});
   p2RenderWeekZones();
   p2UpdateBtn();
 
-  // Gap #7: update KPI ถ้ามีการ drop week
   if(droppedCount > 0){
     const kpiSub = $('p2-kpis')?.querySelector('.k-sub:last-of-type');
     if(kpiSub) kpiSub.textContent = p2WeekData.map(w=>w.label).join(' · ');
-    if(droppedCount > 0) toast(`📦 Sliding window: เก็บ ${p2WeekData.length} สัปดาห์ล่าสุด`);
+    toast(`📦 Sliding window: เก็บ ${p2WeekData.length} สัปดาห์ล่าสุด`);
   }
 }
 
 function stLoadP2(){
   const arr = stLoad(SK.p2);
   if(!arr.length) return false;
-  const mk = (n,a) => n + '\x00' + (a||'').toLowerCase();
-  p2WeekData = arr.map(e => {
-    const m = new Map();
-    (e.songMapArr||[]).forEach(row => {
-      if(!Array.isArray(row)) return;
-      if(row[1] && typeof row[1]==='object' && !Array.isArray(row[1]) && ('streams' in row[1] || 'name' in row[1])){
-        // legacy: [key, {name,artist,streams,label}] — แปลง label→vLabels แบบ best-effort
-        const v=row[1];
-        if(!v.vLabels) v.vLabels = v.label ? {[v.label]: (v.streams||0)} : {};
-        m.set(row[0], v);
-      } else if(typeof row[1]==='number'){           // very-old: [key, streams]
-        m.set(row[0], {streams:row[1], vLabels:{}});
-      } else {                                        // compact: [name, artist, streams, vLabels]
-        const [n,a,s,vl] = row;
-        m.set(mk(n,a), {name:n, artist:a, streams:s||0, vLabels: (vl && typeof vl==='object')?vl:{}});
-      }
-    });
-    return {
-      label: e.label,
-      songMap: m,
-      appleTotal: e.appleTotal||0,
-      virginTotal: e.virginTotal||0,
-      grandTotal: e.grandTotal||0
-    };
-  });
+  p2WeekData = p2ArrToWeekData(arr);
   return true;
 }
 
@@ -3759,6 +3796,52 @@ function stClearPhase(phaseKey){
 }
 
 // ── Auto-restore on load ───────────────────────────────────────────
+// render P2 ทั้งหมดจาก p2WeekData ที่มีอยู่ใน memory (ใช้ทั้งตอน restore จาก localStorage และจาก Drive)
+function p2RenderRestored(){
+  if(!p2WeekData.length) return;
+  try{
+    p2Weeks = p2WeekData.map(wd=>({ label:wd.label, wwFile:null, appleFile:null, virginFile:null, _fromStorage:true }));
+    p2Weeks.push({label:'WW '+(p2Weeks.length+1), wwFile:null, appleFile:null, virginFile:null});
+    p2RenderWeekZones(); p2UpdateBtn();
+    const latest=p2WeekData[p2WeekData.length-1];
+    const prev=p2WeekData.length>1?p2WeekData[p2WeekData.length-2]:null;
+    const sorted=[...latest.songMap.entries()].map(([k,d])=>({...d,_key:k})).sort((a,b)=>b.streams-a.streams);
+    const top20=sorted.slice(0,20);
+    const top100=sorted.slice(0,100);
+    let prevRankMap=new Map();
+    if(prev){[...prev.songMap.entries()].sort((a,b)=>b[1].streams-a[1].streams).forEach(([k],i)=>prevRankMap.set(k,i+1));}
+    const maxS=top20[0]?.streams||1, hasPrev=!!prev;
+    p2_data=top100.map((r,i)=>{
+      const rank=i+1,prevS=prev?((prev.songMap.get(r._key)||{streams:0}).streams):0;
+      const prevRk=prevRankMap.get(r._key)||null,rkChg=prevRk?prevRk-rank:null;
+      const pctChg=prevS>0?((r.streams-prevS)/prevS*100):null;
+      return {...r,rank,prevStreams:prevS,prevRank:prevRk,rankChange:rkChg,pctChange:pctChg,isNewEntry:hasPrev&&prevS===0};
+    });
+    p2Data=p2_data;
+    const latestTotal=latest.grandTotal||0;
+    const prevTotal=prev?(prev.grandTotal||0):null;
+    const diff=prevTotal!==null?latestTotal-prevTotal:null;
+    const pctWoW=prevTotal&&prevTotal>0?(latestTotal-prevTotal)/prevTotal*100:null;
+    const kw=$('p2-kpis');
+    kw.style.gridTemplateColumns=diff!==null?'repeat(3,1fr)':'repeat(2,1fr)';
+    kw.innerHTML=`
+      <div class="kpi kt"><div class="k-lbl">📊 Total Streams (${esc(latest.label)})</div>
+        <div class="k-val" style="color:var(--teal)">${fmt(latestTotal)}</div>
+        <div class="k-sub">🍎 ${fmt(latest.appleTotal||0)} · 🟢 ${fmt(latest.virginTotal||0)}</div></div>
+      <div class="kpi kt"><div class="k-lbl">📅 สัปดาห์ที่โหลด</div>
+        <div class="k-val" style="font-size:18px">${p2WeekData.length}</div>
+        <div class="k-sub">${p2WeekData.map(w=>esc(w.label)).join(' · ')}</div></div>
+      ${diff!==null?`<div class="kpi ${diff>=0?'kpos':'kneg'}"><div class="k-lbl">📈 WoW Change</div>
+        <div class="k-val">${diff>=0?'+':''}${fmt(diff)}</div>
+        <div class="k-sub">${pctWoW!==null?(pctWoW>=0?'+':'')+pctWoW.toFixed(1)+'%':''} ${esc(prev.label)} → ${esc(latest.label)}</div></div>`:''}`;
+    p2RenderSummary(); p2RenderChart(p2_data,maxS);
+    $('p2-res').style.display='block';
+    $('p2-rst').style.display='inline-flex'; $('p2-csv').style.display='inline-flex';
+    if(p2WeekData.length>1) p2RenderTimeline();
+    p2UpdateLabelDropdown();   // ให้ dropdown Label พร้อมใช้หลัง restore
+  }catch(e){console.warn('p2RenderRestored error',e);}
+}
+
 function stRestoreAll(){
   let restored = [];
 
@@ -3797,8 +3880,8 @@ function stRestoreAll(){
   }
 
   // ── P1 MoM restore ─────────────────────────────────────────
-  const momArr = p1MoMLoad();
-  if(momArr.length){
+  p1MoMLoad();   // init global momArr จาก localStorage ถ้ายังไม่ได้โหลด
+  if(momArr && momArr.length){
     restored.push(`MoM: ${momArr.length} เดือน`);
     // MoM dashboard อยู่ใน p1-res แต่ต้องแสดงได้โดยไม่ต้อง run Phase 1
     // ย้าย p1-mom-wrap ออกมาแสดงแยก หรือแสดง p1-res เฉพาะส่วน MoM
@@ -3813,51 +3896,7 @@ function stRestoreAll(){
   // ── P2 restore ──────────────────────────────────────────────
   if(stLoadP2() && p2WeekData.length){
     restored.push(`P2: ${p2WeekData.length} สัปดาห์`);
-    try{
-      // sync upload zones: show stored WW + 1 empty new slot
-      p2Weeks = p2WeekData.map(wd=>({
-        label:wd.label, wwFile:null, appleFile:null, virginFile:null, _fromStorage:true
-      }));
-      p2Weeks.push({label:'WW '+(p2Weeks.length+1), wwFile:null, appleFile:null, virginFile:null});
-      p2RenderWeekZones(); p2UpdateBtn();
-      // rebuild top20
-      const latest=p2WeekData[p2WeekData.length-1];
-      const prev=p2WeekData.length>1?p2WeekData[p2WeekData.length-2]:null;
-      const sorted=[...latest.songMap.entries()].map(([k,d])=>({...d,_key:k})).sort((a,b)=>b.streams-a.streams);
-      const top20=sorted.slice(0,20);
-      const top100=sorted.slice(0,100);
-      let prevRankMap=new Map();
-      if(prev){[...prev.songMap.entries()].sort((a,b)=>b[1].streams-a[1].streams).forEach(([k],i)=>prevRankMap.set(k,i+1));}
-      const maxS=top20[0]?.streams||1, hasPrev=!!prev;
-      p2_data=top100.map((r,i)=>{
-        const rank=i+1,prevS=prev?((prev.songMap.get(r._key)||{streams:0}).streams):0;
-        const prevRk=prevRankMap.get(r._key)||null,rkChg=prevRk?prevRk-rank:null;
-        const pctChg=prevS>0?((r.streams-prevS)/prevS*100):null;
-        return {...r,rank,prevStreams:prevS,prevRank:prevRk,rankChange:rkChg,pctChange:pctChg,isNewEntry:hasPrev&&prevS===0};
-      });
-      p2Data=p2_data;
-      const latestTotal=latest.grandTotal||0;
-      const prevTotal=prev?(prev.grandTotal||0):null;
-      const diff=prevTotal!==null?latestTotal-prevTotal:null;
-      const pctWoW=prevTotal&&prevTotal>0?(latestTotal-prevTotal)/prevTotal*100:null;
-      const kw=$('p2-kpis');
-      kw.style.gridTemplateColumns=diff!==null?'repeat(3,1fr)':'repeat(2,1fr)';
-      kw.innerHTML=`
-        <div class="kpi kt"><div class="k-lbl">📊 Total Streams (${esc(latest.label)})</div>
-          <div class="k-val" style="color:var(--teal)">${fmt(latestTotal)}</div>
-          <div class="k-sub">🍎 ${fmt(latest.appleTotal||0)} · 🟢 ${fmt(latest.virginTotal||0)}</div></div>
-        <div class="kpi kt"><div class="k-lbl">📅 สัปดาห์ที่โหลด</div>
-          <div class="k-val" style="font-size:18px">${p2WeekData.length}</div>
-          <div class="k-sub">${p2WeekData.map(w=>esc(w.label)).join(' · ')}</div></div>
-        ${diff!==null?`<div class="kpi ${diff>=0?'kpos':'kneg'}"><div class="k-lbl">📈 WoW Change</div>
-          <div class="k-val">${diff>=0?'+':''}${fmt(diff)}</div>
-          <div class="k-sub">${pctWoW!==null?(pctWoW>=0?'+':'')+pctWoW.toFixed(1)+'%':''} ${esc(prev.label)} → ${esc(latest.label)}</div></div>`:''}`;
-      p2RenderSummary(); p2RenderChart(p2_data,maxS);
-      $('p2-res').style.display='block';
-      $('p2-rst').style.display='inline-flex'; $('p2-csv').style.display='inline-flex';
-      // pre-render timeline ไว้เลย (container hidden แต่ข้อมูลพร้อม)
-      if(p2WeekData.length>1) p2RenderTimeline();
-    }catch(e){console.warn('P2 restore error',e);}
+    p2RenderRestored();
   }
 
   // ── P3 restore ──────────────────────────────────────────────
@@ -4508,6 +4547,40 @@ stRestoreAll();
 // auto-fill Google Sheets URL if saved
 const _gsEl = $('gs-url-input');
 if(_gsEl && GS_URL) _gsEl.value = GS_URL;
+
+// ── Drive = ตัวจริง: เปิดแอปแล้วถ้า cache ใน localStorage ถูกย่อ ดึงข้อมูล "เต็ม" จาก Drive อัตโนมัติ
+(async ()=>{
+  if(!GS_URL) return;
+  // P2 — cache ถูก cap (เพลงไม่ครบ)
+  try{
+    const raw = stLoad(SK.p2);
+    const capped = raw.length && raw.some(e => (e.songMapArr?.length||0) < (e.songCount||0));
+    if(capped){
+      const p2 = await gsLoad('p2');
+      if(p2){
+        const full = p2ArrToWeekData(typeof p2==='string'? JSON.parse(p2) : p2);
+        if(full.some(w=>w.songMap.size > 100)){
+          p2WeekData = full; p2RenderRestored();
+          toast('☁ โหลดข้อมูล Label เต็มจาก Drive แล้ว');
+        }
+      }
+    }
+  }catch(e){ console.warn('auto-load p2:',e); }
+  // MoM — cache เป็น lite (ไม่มี rows รายเพลง) → ดึงเต็มจาก Drive (ต้องใช้ทำหน้าเทียบเดือน)
+  try{
+    p1MoMLoad();
+    const litish = momArr && momArr.length && momArr.some(m=>!m.rows || !m.rows.length);
+    if(litish){
+      const mom = await gsLoad('p1_mom');
+      if(mom){
+        const full = typeof mom==='string'? JSON.parse(mom) : mom;
+        if(full.some(m=>m.rows && m.rows.length)){
+          momArr = full; p1MoMCacheLocal(); p1RenderMoM();
+        }
+      }
+    }
+  }catch(e){ console.warn('auto-load mom:',e); }
+})();
 </script>
 </body>
 </html>
