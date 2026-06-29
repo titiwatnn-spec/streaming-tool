@@ -3464,33 +3464,44 @@ function p2RenderLabel(){
 function stSaveP2(){
   if(!p2WeekData.length) return;
 
-  // เก็บแค่ Top 20 songs ใน songMapArr
-  // Total streams (Apple+Virgin) อยู่ใน grandTotal/appleTotal/virginTotal แล้ว
-  // Chart และ Timeline ใช้แค่ Top 20 → ไม่จำเป็นต้องเก็บทุกเพลง
-  const MAX_SONGS_STORED = 100;
+  // เก็บ "ทุกเพลง" ต่อสัปดาห์ แบบ compact tuple [name, artist, streams, label]
+  // (เดิมเก็บแค่ Top 100 ตาม stream รวม → ทำให้ Label tracking ไม่ครบ:
+  //  เพลงของ label เล็กที่ stream ต่ำกว่าอันดับ 100 ของทั้งระบบจะหายหมด)
+  // ถ้า localStorage เต็ม จะลดจำนวนเพลง/สัปดาห์ลงอัตโนมัติทีละขั้น
+  const buildEntries = (wd, cap) => {
+    let ents = [...wd.songMap.entries()];
+    if(cap) ents = ents.sort((a,b)=>b[1].streams-a[1].streams).slice(0, cap);
+    return ents.map(([,v])=>[v.name||'', v.artist||'', v.streams||0, v.label||'']);
+  };
 
-  p2WeekData.forEach(wd => {
-    const topEntries = [...wd.songMap.entries()]
-      .sort((a,b)=>b[1].streams-a[1].streams)
-      .slice(0, MAX_SONGS_STORED);
-
-    stUpsert(SK.p2, {
-      label: wd.label,
-      savedAt: new Date().toISOString(),
-      songMapArr: topEntries,
-      songCount: wd.songMap.size,
-      appleTotal: wd.appleTotal||0,
-      virginTotal: wd.virginTotal||0,
-      grandTotal: wd.grandTotal||0
+  let arr = null;
+  for(const cap of [0, 4000, 2000, 1000, 300, 100]){   // 0 = เก็บทุกเพลง
+    let next = stLoad(SK.p2);
+    p2WeekData.forEach(wd => {
+      const entry = {
+        label: wd.label,
+        savedAt: new Date().toISOString(),
+        songMapArr: buildEntries(wd, cap),
+        songCount: wd.songMap.size,
+        appleTotal: wd.appleTotal||0,
+        virginTotal: wd.virginTotal||0,
+        grandTotal: wd.grandTotal||0
+      };
+      const idx = next.findIndex(e=>e.label===entry.label);   // overwrite ถ้า label ซ้ำ
+      if(idx>=0) next[idx]=entry; else next.push(entry);
     });
-  });
-
-  // ── Sliding window: ตัด storage ให้เหลือแค่ MAX_STORED ──────
-  let arr = stLoad(SK.p2);
-  if(arr.length > MAX_STORED){
-    arr = arr.slice(arr.length - MAX_STORED); // เก็บ N ล่าสุด
-    stSave(SK.p2, arr);
+    if(next.length > MAX_STORED) next = next.slice(next.length - MAX_STORED); // เก็บ N ล่าสุด
+    try{
+      localStorage.setItem(SK.p2, JSON.stringify(next));
+      arr = next;
+      if(cap) toast(`⚠ Storage จำกัด — เก็บ ${cap.toLocaleString()} เพลง/สัปดาห์ (Label อาจไม่ครบ)`);
+      break;
+    }catch(e){
+      if(!(e.name==='QuotaExceededError'||e.code===22)){ console.error('stSaveP2:',e); break; }
+      // localStorage เต็ม → ลองรอบถัดไปด้วย cap ที่เล็กลง
+    }
   }
+  if(!arr){ toast('⚠ Storage เต็ม — ลบข้อมูลเก่าใน tab 🗄 Storage แล้วลองใหม่'); arr = stLoad(SK.p2); }
 
   // ── sync p2WeekData ให้ตรงกับ storage ──────────────────────
   const kept = new Set(arr.map(e=>e.label));
@@ -3524,13 +3535,28 @@ function stSaveP2(){
 function stLoadP2(){
   const arr = stLoad(SK.p2);
   if(!arr.length) return false;
-  p2WeekData = arr.map(e => ({
-    label: e.label,
-    songMap: new Map(e.songMapArr.map(([k,v])=>[k, typeof v==='object'?v:{streams:v}])),
-    appleTotal: e.appleTotal||0,
-    virginTotal: e.virginTotal||0,
-    grandTotal: e.grandTotal||0
-  }));
+  const mk = (n,a) => n + '\x00' + (a||'').toLowerCase();
+  p2WeekData = arr.map(e => {
+    const m = new Map();
+    (e.songMapArr||[]).forEach(row => {
+      if(!Array.isArray(row)) return;
+      if(row[1] && typeof row[1]==='object'){        // legacy: [key, {name,artist,streams,label}]
+        m.set(row[0], row[1]);
+      } else if(typeof row[1]==='number'){           // very-old: [key, streams]
+        m.set(row[0], {streams:row[1]});
+      } else {                                        // compact: [name, artist, streams, label]
+        const [n,a,s,l] = row;
+        m.set(mk(n,a), {name:n, artist:a, streams:s||0, label:l||''});
+      }
+    });
+    return {
+      label: e.label,
+      songMap: m,
+      appleTotal: e.appleTotal||0,
+      virginTotal: e.virginTotal||0,
+      grandTotal: e.grandTotal||0
+    };
+  });
   return true;
 }
 
@@ -4402,7 +4428,7 @@ async function exportPPTX(){
         const v=latWD.songMap.get(k);
         const curr=v?.streams||0;
         const prev=prevWD.songMap.get(k)?.streams||0;
-        return {name:v?.name||k.split('')[0],artist:v?.artist||'',curr,prev};
+        return {name:v?.name||k.split('\x00')[0],artist:v?.artist||'',curr,prev};
       }).filter(r=>r.curr>0||r.prev>0).sort((a,b)=>b.curr-a.curr).slice(0,20);
 
       if(labelRows.length){
