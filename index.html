@@ -1201,7 +1201,7 @@ async function p1Run(){
     $('p1-rst').style.display='inline-flex'; $('p1-csv').style.display='inline-flex'; $('p1-xl').style.display='inline-flex';
     $('p1-save-mom').style.display='inline-flex';
     $('p1-tbl-wrap').style.display='block';
-    stSaveP1();
+    stSaveP1(); gsP1Push();
     p1RenderMoM();
     $('p1-ia').value=''; $('p1-iv').value='';
     ['a','v'].forEach(t=>{
@@ -3239,7 +3239,7 @@ async function p4Run(){
     $('p4-sheets').style.display='inline-flex';
     p4_results=results;
     ovCheckStatus();
-    stSaveP4();
+    stSaveP4(); gsP4Push();
     toast(`✅ สรุปแล้ว ${results.length} สัปดาห์ · รวม ${fmt(gT)} streams`);
   }catch(err){$('p4-err').textContent='⚠ '+err.message;$('p4-prog').style.display='none';console.error(err);}
   $('p4-go').disabled=false;
@@ -3352,6 +3352,8 @@ async function gsSyncAll(){
     // P3
     const p3raw = localStorage.getItem(SK.p3);
     if(p3raw) tasks.push(gsSave('p3', p3raw));
+    const p4raw = localStorage.getItem(SK.p4);
+    if(p4raw) tasks.push(gsSave('p4', p4raw));
 
     await Promise.all(tasks);
     toast('✅ Sync สำเร็จ — ข้อมูลอยู่ใน Google Sheets แล้ว');
@@ -3367,12 +3369,13 @@ async function gsRestoreAll(){
   if(btn){ btn.disabled=true; btn.textContent='⏳ กำลังโหลด...'; }
   toast('📥 กำลังโหลดข้อมูลจาก Google Sheets...');
   try{
-    const [p1rows, p1mom, p2, p3] = await Promise.all([
-      gsLoad('p1_rows'), gsLoad('p1_mom'), gsLoad('p2'), gsLoad('p3')
+    const [p1rows, p1mom, p2, p3, p4] = await Promise.all([
+      gsLoad('p1_rows'), gsLoad('p1_mom'), gsLoad('p2'), gsLoad('p3'), gsLoad('p4')
     ]);
     let count = 0;
     if(p1rows){ localStorage.setItem(SK.p1, typeof p1rows==='string'?p1rows:JSON.stringify(p1rows)); count++; }
     if(p3){     localStorage.setItem(SK.p3, typeof p3==='string'?p3:JSON.stringify(p3)); count++; }
+    if(p4){     localStorage.setItem(SK.p4, typeof p4==='string'?p4:JSON.stringify(p4)); count++; }
     // MoM — โหลด "เต็ม" เข้า memory (ไม่ยัดลง localStorage เพราะ 12 เดือนเกิน quota)
     if(p1mom){ try{ momArr = typeof p1mom==='string'?JSON.parse(p1mom):p1mom; p1MoMCacheLocal(); count++; }catch(e){ console.warn('mom parse',e); } }
     // P2 — โหลด "เต็ม" เข้า memory ตรง ๆ (ไม่ยัดลง localStorage เพราะอาจเกิน quota)
@@ -3552,6 +3555,8 @@ function gsP3Push(){   // ดัน P3 ขึ้น Drive อัตโนมั�
   if(!GS_URL) return;
   try{ const raw=localStorage.getItem(SK.p3); if(raw) gsSave('p3', raw); }catch(e){ console.warn('gsP3Push:',e); }
 }
+function gsP1Push(){ if(!GS_URL) return; try{ const raw=localStorage.getItem(SK.p1); if(raw) gsSave('p1_rows', raw); }catch(e){ console.warn('gsP1Push:',e); } }
+function gsP4Push(){ if(!GS_URL) return; try{ const raw=localStorage.getItem(SK.p4); if(raw) gsSave('p4', raw); }catch(e){ console.warn('gsP4Push:',e); } }
 // render P2 ทั้งหมดจาก p2WeekData ที่อยู่ใน memory (ใช้ตอน restore จาก localStorage หรือ Drive)
 function p2RenderRestored(){
   if(!p2WeekData.length) return;
