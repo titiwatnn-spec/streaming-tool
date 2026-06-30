@@ -1042,8 +1042,9 @@ function parseVirgin(file){
         // Use "Song Name \x00 Artist" as composite key to prevent
         // same-name different-artist songs from being merged (e.g. covers)
         const iL=hdr.findIndex(h=>/label.?name/i.test(h)||/^label$/i.test(h));
-        const qmap=new Map(); // key→qty
+        const qmap=new Map(); // key→qty (รวมตามเพลง)
         const metaMap=new Map(); // key→{name,art,label}
+        const lblMap=new Map(); // key\x00label → {name,artist,label,streams} (แยกตามเพลง×label)
         for(let i=1;i<lines.length;i++){
           if(!lines[i].trim()) continue;
           const cols=pRow(lines[i]);
@@ -1055,13 +1056,19 @@ function parseVirgin(file){
           const key=song+'\x00'+art.toLowerCase();
           qmap.set(key,(qmap.get(key)||0)+qty);
           if(!metaMap.has(key)) metaMap.set(key,{name:song,artist:art,label:lbl});
+          // แยกยอดตาม (เพลง×label) — เพลงเดียวอาจอยู่หลาย label
+          if(lbl){
+            const lk=key+'\x00'+lbl;
+            const e=lblMap.get(lk);
+            if(e) e.streams+=qty; else lblMap.set(lk,{name:song,artist:art,label:lbl,streams:qty});
+          }
         }
         const rows=[];
         for(const [key,streams] of qmap){
           const m=metaMap.get(key)||{};
           rows.push({name:m.name||'',artist:m.artist||'',streams,label:m.label||''});
         }
-        res({rows,total:[...qmap.values()].reduce((s,v)=>s+v,0)});
+        res({rows,total:[...qmap.values()].reduce((s,v)=>s+v,0),labelRows:[...lblMap.values()]});
       }catch(err){rej(err);}
     };
     rd.onerror=()=>rej(new Error('อ่านไฟล์ Virgin ไม่ได้'));
@@ -2001,6 +2008,14 @@ async function p2Run(){
           if(ex){ ex.streams+=x.streams; if(!ex.label&&x.label) ex.label=x.label; }
           else songMap.set(k,{name:x.name,artist:x.artist,streams:x.streams,label:x.label||''});
         });
+        // vLabels = ยอด Virgin แยกตาม label ต่อเพลง (เพลงเดียวอยู่ได้หลาย label เช่น S1 Music / Solution One Holding)
+        (r.labelRows||[]).forEach(x=>{
+          if(!x.name) return;
+          const ex=songMap.get(mkKey(x.name,x.artist));
+          if(!ex) return;
+          if(!ex.vLabels) ex.vLabels={};
+          ex.vLabels[x.label]=(ex.vLabels[x.label]||0)+x.streams;
+        });
       }
       const grandTotal=appleTotal+virginTotal;
       if(grandTotal>0 || songMap.size>0){
@@ -2170,7 +2185,13 @@ function p2RenderTimeline(){
   if(!tbl) return;
   if(!p2_data.length||!p2WeekData.length){ p2TimelineHTML=''; tbl.innerHTML=''; return; }
   const q=($('p2-tl-search')||{value:''}).value.toLowerCase();
-  const rows=q ? p2_data.filter(r=>r.name.toLowerCase().includes(q)||r.artist.toLowerCase().includes(q)) : p2_data.slice(0,100);
+  // โชว์ Top 200 จากทุกเพลงที่อ่านได้ (union ทุกสัปดาห์ใน memory) เรียงตาม streams สัปดาห์ล่าสุด
+  const seen=new Map();
+  p2WeekData.forEach(wd=>wd.songMap.forEach((v,k)=>{ if(!seen.has(k)) seen.set(k,{_key:k,name:v.name||k.split('\x00')[0],artist:v.artist||''}); }));
+  const latSM=p2WeekData[p2WeekData.length-1].songMap;
+  let rows=[...seen.values()].sort((a,b)=>((latSM.get(b._key)?.streams||0)-(latSM.get(a._key)?.streams||0)));
+  if(q) rows=rows.filter(r=>r.name.toLowerCase().includes(q)||(r.artist||'').toLowerCase().includes(q));
+  else rows=rows.slice(0,200);
   const labels=p2WeekData.map(w=>w.label);
 
   // ── Pre-compute rank maps O(WW × n log n) ──────────────────
@@ -3374,7 +3395,10 @@ function p2UpdateLabelDropdown(){
   const sel=$('p2-label-sel'); if(!sel) return;
   const cur=sel.value;
   const allLabels=new Set();
-  p2WeekData.forEach(wd=>[...wd.songMap.values()].forEach(v=>{ if(v.label) allLabels.add(v.label); }));
+  p2WeekData.forEach(wd=>[...wd.songMap.values()].forEach(v=>{
+    if(v.vLabels) for(const l in v.vLabels){ if(l) allLabels.add(l); }
+    else if(v.label) allLabels.add(v.label);   // เผื่อข้อมูลเก่าที่ยังไม่มี vLabels
+  }));
   sel.innerHTML='<option value="">🏷 ทุก Label</option>'+
     [...allLabels].sort().map(l=>`<option value="${l}"${l===cur?' selected':''}>${l}</option>`).join('');
   p2RenderLabel();
@@ -3391,14 +3415,18 @@ function p2RenderLabel(){
   const prevWD=p2WeekData.length>=2?p2WeekData[p2WeekData.length-2]:null;
   const latWD=p2WeekData[p2WeekData.length-1];
 
-  // รวมเพลงทุก WW ที่ label ตรง
+  // รวมเพลงทุก WW ที่มียอดภายใต้ label นี้ (ยอดแยกตาม เพลง×label จาก Virgin)
+  const vget=(wd,k)=>{ const v=wd&&wd.songMap.get(k); if(!v) return 0; return v.vLabels?(v.vLabels[lbl]||0):(v.label===lbl?(v.streams||0):0); };
   const allKeys=new Set();
-  p2WeekData.forEach(wd=>[...wd.songMap.entries()].forEach(([k,v])=>{ if(v.label===lbl) allKeys.add(k); }));
+  p2WeekData.forEach(wd=>[...wd.songMap.entries()].forEach(([k,v])=>{
+    if(v.vLabels){ if(v.vLabels[lbl]) allKeys.add(k); }
+    else if(v.label===lbl) allKeys.add(k);
+  }));
 
   const rows=[...allKeys].map(k=>{
     const v=latWD.songMap.get(k);
-    const curr=v?.streams||0;
-    const prev=prevWD?.songMap.get(k)?.streams||0;
+    const curr=vget(latWD,k);
+    const prev=vget(prevWD,k);
     const name=v?.name||k.split('\x00')[0];
     const artist=v?.artist||'';
     return {name,artist,curr,prev};
@@ -4396,13 +4424,17 @@ async function exportPPTX(){
     if(selLabel && p2WeekData.length>=2){
       const prevWD=p2WeekData[p2WeekData.length-2];
       const latWD=p2WeekData[p2WeekData.length-1];
+      const vget=(wd,k)=>{ const v=wd&&wd.songMap.get(k); if(!v) return 0; return v.vLabels?(v.vLabels[selLabel]||0):(v.label===selLabel?(v.streams||0):0); };
       const allKeys=new Set();
-      p2WeekData.forEach(wd=>[...wd.songMap.entries()].forEach(([k,v])=>{ if(v.label===selLabel) allKeys.add(k); }));
+      p2WeekData.forEach(wd=>[...wd.songMap.entries()].forEach(([k,v])=>{
+        if(v.vLabels){ if(v.vLabels[selLabel]) allKeys.add(k); }
+        else if(v.label===selLabel) allKeys.add(k);
+      }));
       const labelRows=[...allKeys].map(k=>{
         const v=latWD.songMap.get(k);
-        const curr=v?.streams||0;
-        const prev=prevWD.songMap.get(k)?.streams||0;
-        return {name:v?.name||k.split('')[0],artist:v?.artist||'',curr,prev};
+        const curr=vget(latWD,k);
+        const prev=vget(prevWD,k);
+        return {name:v?.name||k.split('\x00')[0],artist:v?.artist||'',curr,prev};
       }).filter(r=>r.curr>0||r.prev>0).sort((a,b)=>b.curr-a.curr).slice(0,20);
 
       if(labelRows.length){
