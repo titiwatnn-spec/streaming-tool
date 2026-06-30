@@ -1,4 +1,12 @@
 <!DOCTYPE html>
+<!--
+  Streaming Tool — v2026.06.30  (WW Streams — tested & passed ✅)
+  • Time Track: โชว์ Top 200 ครบทุกสัปดาห์
+  • Label: นับยอดตาม (เพลง × label) จาก Virgin (vLabels) — S1 Music 132 เพลง, ความคิดถึง 1,349
+  • P2: auto-save ข้อมูลเต็มขึ้น Google Drive → refresh ไม่หาย
+  • การเซฟ verified: รวมทุก ISRC ของเพลงเดียวกัน + Apple ตามดีไซน์
+  หมายเหตุ: P1/P3/MoM/P4 ยังต้องกด Sync เอง (auto-push step ถัดไป)
+-->
 <html lang="th">
 <head>
 <meta charset="UTF-8">
@@ -2689,6 +2697,7 @@ async function p3Run(){
     $('p3-rst').style.display='inline-flex'; $('p3-csv').style.display='inline-flex';
     ovCheckStatus();
     stSaveP3();
+    gsP3Push();      // Drive auto-push (เหมือน P2)
     const totalLabel = manualTotal ? `Grand Total ${fmt(grandTotal)} (Manual)` : `Sum ${fmt(grandTotal)}`;
     toast(`✅ โหลดแล้ว ${p3WeekData.length} สัปดาห์ · ${totalLabel}`);
   }catch(err){ $('p3-err').textContent='⚠ '+err.message; $('p3-prog').style.display='none'; console.error(err); }
@@ -3523,6 +3532,10 @@ function p2FullDeserialize(arr){
 function gsP2Push(){   // ดัน P2 เต็มขึ้น Drive (fire-and-forget) — ไม่บล็อก UI, กันข้อมูลหายตอน refresh
   if(!GS_URL || !p2WeekData.length) return;
   try{ gsSave('p2', JSON.stringify(p2FullSerialize())); }catch(e){ console.warn('gsP2Push:',e); }
+}
+function gsP3Push(){   // ดัน P3 ขึ้น Drive อัตโนมัติ (P3 เล็ก เก็บเต็มใน localStorage อยู่แล้ว)
+  if(!GS_URL) return;
+  try{ const raw=localStorage.getItem(SK.p3); if(raw) gsSave('p3', raw); }catch(e){ console.warn('gsP3Push:',e); }
 }
 // render P2 ทั้งหมดจาก p2WeekData ที่อยู่ใน memory (ใช้ตอน restore จาก localStorage หรือ Drive)
 function p2RenderRestored(){
