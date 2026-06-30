@@ -1382,18 +1382,31 @@ function p1SaveMoM(){
 }
 
 // ── Load/Save MoM ──────────────────────────────────────────────
-function p1MoMLoad(){ try{return JSON.parse(localStorage.getItem(SK_MOM)||'[]');}catch(e){return[];} }
-function p1MoMSave(arr){ try{localStorage.setItem(SK_MOM,JSON.stringify(arr));}catch(e){toast('⚠ Storage เต็ม');} }
+// MoM: Google Drive = ตัวจริง (12 เดือน รายเพลงเต็ม) · localStorage = cache (ไม่พอเก็บแค่ totals) · momArr = memory
+let momArr = null;
+function p1MoMLoad(){
+  if(momArr===null){ try{ momArr=JSON.parse(localStorage.getItem(SK_MOM)||'[]'); }catch(e){ momArr=[]; } }
+  return momArr;
+}
+function p1MoMCacheLocal(){
+  try{ localStorage.setItem(SK_MOM, JSON.stringify(momArr||[])); }
+  catch(e){   // localStorage เต็ม → เก็บแค่ totals (rows อยู่บน Drive/memory)
+    try{ localStorage.setItem(SK_MOM, JSON.stringify((momArr||[]).map(m=>({label:m.label,apple:m.apple,virgin:m.virgin,total:m.total,savedAt:m.savedAt})))); }
+    catch(e2){ console.warn('MoM cache:',e2); }
+  }
+}
+function gsMoMPush(){ if(GS_URL && momArr!==null){ try{ gsSave('p1_mom', JSON.stringify(momArr)); }catch(e){ console.warn('gsMoMPush:',e); } } }
+function p1MoMSave(arr){ momArr=arr||[]; p1MoMCacheLocal(); gsMoMPush(); }
 function p1MoMUpsert(entry){
   let arr = p1MoMLoad();
   const idx = arr.findIndex(e=>e.label===entry.label);
   if(idx>=0) arr[idx]=entry; else arr.push(entry);
-  if(arr.length>MAX_MOM) arr=arr.slice(arr.length-MAX_MOM);
+  if(arr.length>MAX_MOM) arr=arr.slice(arr.length-MAX_MOM);   // sliding 12 เดือน
   p1MoMSave(arr);
 }
 function p1ClearMoM(){
   if(!confirm('ล้างข้อมูล MoM ทั้งหมด?')) return;
-  localStorage.removeItem(SK_MOM);
+  momArr=[]; localStorage.removeItem(SK_MOM); gsMoMPush();
   p1RenderMoM();
   toast('🗑 ล้างข้อมูล MoM แล้ว');
 }
@@ -3331,8 +3344,8 @@ async function gsSyncAll(){
     const p1raw = (() => { try{ return localStorage.getItem(SK.p1); }catch(e){return null;} })();
     if(p1raw) tasks.push(gsSave('p1_rows', p1raw));
     // P1 MoM
-    const momraw = localStorage.getItem(SK_MOM);
-    if(momraw) tasks.push(gsSave('p1_mom', momraw));
+    const momFull = (momArr&&momArr.length)?JSON.stringify(momArr):localStorage.getItem(SK_MOM);
+    if(momFull) tasks.push(gsSave('p1_mom', momFull));
     // P2 — ดันข้อมูล "เต็ม" จาก memory (ไม่ใช่ top-100 ใน localStorage)
     const p2full = p2WeekData.length ? JSON.stringify(p2FullSerialize()) : localStorage.getItem(SK.p2);
     if(p2full) tasks.push(gsSave('p2', p2full));
@@ -3359,8 +3372,9 @@ async function gsRestoreAll(){
     ]);
     let count = 0;
     if(p1rows){ localStorage.setItem(SK.p1, typeof p1rows==='string'?p1rows:JSON.stringify(p1rows)); count++; }
-    if(p1mom){  localStorage.setItem(SK_MOM, typeof p1mom==='string'?p1mom:JSON.stringify(p1mom)); count++; }
     if(p3){     localStorage.setItem(SK.p3, typeof p3==='string'?p3:JSON.stringify(p3)); count++; }
+    // MoM — โหลด "เต็ม" เข้า memory (ไม่ยัดลง localStorage เพราะ 12 เดือนเกิน quota)
+    if(p1mom){ try{ momArr = typeof p1mom==='string'?JSON.parse(p1mom):p1mom; p1MoMCacheLocal(); count++; }catch(e){ console.warn('mom parse',e); } }
     // P2 — โหลด "เต็ม" เข้า memory ตรง ๆ (ไม่ยัดลง localStorage เพราะอาจเกิน quota)
     let p2arr = null;
     if(p2){ try{ p2arr = typeof p2==='string'? JSON.parse(p2) : p2; count++; }catch(e){ console.warn('p2 parse',e); } }
@@ -3371,6 +3385,7 @@ async function gsRestoreAll(){
         const full = p2FullDeserialize(p2arr);
         if(full.length){ p2WeekData = full; try{ stSaveP2(); }catch(e){} p2RenderRestored(); }
       }
+      p1RenderMoM();
       renderStorage();
     }, 500);
   }catch(e){
@@ -4550,6 +4565,20 @@ if(_gsEl && GS_URL) _gsEl.value = GS_URL;
       toast('☁ โหลด WW Streams เต็มจาก Drive');
     }
   }catch(e){ console.warn('auto-load p2 from Drive:',e); }
+})();
+
+// ── MoM: ถ้า cache เป็น lite (ไม่มี rows) ดึงเต็มจาก Drive (ใช้ทำหน้าเทียบเดือน) ──
+(async ()=>{
+  if(!GS_URL) return;
+  try{
+    p1MoMLoad();
+    const lite = momArr && momArr.length && momArr.some(m=>!m.rows || !m.rows.length);
+    if(!lite) return;
+    const mom = await gsLoad('p1_mom');
+    if(!mom) return;
+    const full = typeof mom==='string'?JSON.parse(mom):mom;
+    if(full.some(m=>m.rows && m.rows.length)){ momArr=full; p1MoMCacheLocal(); p1RenderMoM(); }
+  }catch(e){ console.warn('auto-load mom:',e); }
 })();
 </script>
 </body>
