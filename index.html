@@ -467,6 +467,10 @@ td.src{text-align:center;width:110px} td.art{color:var(--fg2)}
   .c-prev{display:none}
   .p3-chart-head,.p3-crow{grid-template-columns:36px 1fr 72px 50px}
   .ov-grid{grid-template-columns:1fr 1fr}
+  /* มือถือ: การ์ดสัปดาห์ (WW slots) เลิกบีบเป็นหลายคอลัมน์ → เลื่อนแนวนอน (swipe) การ์ดละ ~82% */
+  #p2-week-zones>div,#p3-week-zones>div,#p4-weeks{display:flex !important;overflow-x:auto;-webkit-overflow-scrolling:touch;gap:10px;padding-bottom:4px}
+  #p2-week-zones>div>*,#p3-week-zones>div>*,#p4-weeks>*{flex:0 0 82%;min-width:0}
+  .wrap{padding:1rem .7rem 4rem}
 }
 </style>
 </head>
