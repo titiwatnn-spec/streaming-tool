@@ -4289,10 +4289,12 @@ async function exportPPTX(){
     };
     const fmt = n => parseInt(n||0).toLocaleString('en-US');
     const pctColor = v => {
+      if(v==='-') return C.gray;
       if(!v||v==='NEW'||v==='GONE'||v==='—') return C.blue;
       return parseFloat(String(v).replace('%',''))>=0 ? C.green : C.red;
     };
     const fmtPct = v => {
+      if(v==='-') return '-';
       if(!v||v==='NEW'||v==='GONE'||v==='—') return v||'—';
       const n=parseFloat(String(v).replace('%',''));
       return (n>=0?'+':'')+n.toFixed(2)+'%';
@@ -4421,15 +4423,15 @@ async function exportPPTX(){
           const curr=r.units||0; const prev=prevMap.get(r.appleId||r.name)||0;
           tCurr+=curr; tPrev+=prev;
           const diff=curr-prev;
-          const pct=prev>0?((diff/prev)*100).toFixed(2)+'%':'NEW';
+          const pct=prev>0?((diff/prev)*100).toFixed(2)+'%':'-';
           const fill={color:i%2===0?C.white:C.rowAlt};
           return [
             {text:String(i+1),options:{fill,align:'center',fontSize:9,color:C.gray}},
             {text:r.name||'',options:{fill,fontSize:9,color:C.dark}},
             {text:r.artist||'',options:{fill,fontSize:9,color:C.gray}},
             {text:type,options:{fill,align:'center',fontSize:9,color:type==='Ringtone'?C.blue:C.teal}},
-            {text:prev||prev===0?fmt(prev):'-',options:{fill,align:'right',fontSize:9,color:C.gray}},
-            {text:fmt(curr),options:{fill,align:'right',fontSize:9,bold:true,color:C.dark}},
+            {text:prev>0?fmt(prev):'-',options:{fill,align:'right',fontSize:9,color:C.gray}},
+            {text:curr>0?fmt(curr):'-',options:{fill,align:'right',fontSize:9,bold:true,color:C.dark}},
             {text:prev>0?(diff>=0?'+':'')+fmt(diff):'-',options:{fill,align:'right',fontSize:9,color:diff>=0?C.green:C.red}},
             {text:fmtPct(pct),options:{fill,align:'right',fontSize:9,bold:true,color:pctColor(pct)}},
           ];
@@ -4458,11 +4460,10 @@ async function exportPPTX(){
       const s6CurrLbl = latP3.label;
       const s6Min = Math.round(Math.min(s6PrevTotal,s6CurrTotal)*0.9);
 
-      // 2-bar chart
+      // 2-bar chart — single series (ค่าเดียว 2 จุด) → แท่งอยู่กลาง label, ตัวเลขไม่เยื้อง
       s6.addChart(pres.charts.BAR,[
-        {name:s6PrevLbl, labels:[s6PrevLbl,s6CurrLbl], values:[s6PrevTotal,0]},
-        {name:s6CurrLbl, labels:[s6PrevLbl,s6CurrLbl], values:[0,s6CurrTotal]},
-      ],{x:2.2,y:0.65,w:8.8,h:5.1,barDir:'col',barGrouping:'clustered',
+        {name:'Downloads', labels:[s6PrevLbl,s6CurrLbl], values:[s6PrevTotal,s6CurrTotal]},
+      ],{x:2.2,y:0.65,w:8.8,h:5.1,barDir:'col',
         chartColors:[C.blue,C.blue],
         chartArea:{fill:{color:'F5F5F5'}},plotArea:{fill:{color:'F5F5F5'}},
         catAxisFontSize:11,valAxisFontSize:9,showLegend:false,
