@@ -4462,9 +4462,10 @@ async function exportPPTX(){
       const s6 = pres.addSlide(); addBg(s6);
       s6.addText('Download iTunes S-One',{x:1.5,y:0.25,w:10,h:0.5,fontSize:15,bold:true,color:C.dark,align:'center'});
 
-      // รวม units ทุก row (ringtone + song)
-      const s6CurrTotal = latP3.rows.reduce((a,r)=>a+(r.units||0),0);
-      const s6PrevTotal = (prevP3?.rows||[]).reduce((a,r)=>a+(r.units||0),0);
+      // ยอดรวมสัปดาห์ = Apple Total จริง (แถว 'Total' ในไฟล์ = manualTotal) ถ้ามี
+      // ไม่งั้น fallback บวก units ทุก row (top-100) — ให้ตรงกับ KPI หน้าจอ (ใช้ manualTotal)
+      const s6CurrTotal = latP3.manualTotal || latP3.rows.reduce((a,r)=>a+(r.units||0),0);
+      const s6PrevTotal = (prevP3?.manualTotal) || (prevP3?.rows||[]).reduce((a,r)=>a+(r.units||0),0);
       const s6Diff = s6CurrTotal - s6PrevTotal;
       const s6Pct = s6PrevTotal>0?((s6Diff/s6PrevTotal)*100):0;
       const s6PctStr = (s6Pct>=0?'+':'')+s6Pct.toFixed(2)+' %';
