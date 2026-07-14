@@ -740,6 +740,7 @@ td.src{text-align:center;width:110px} td.art{color:var(--fg2)}
             </select>
             <span id="p2-label-count" style="font-size:11px;color:var(--fg3)"></span>
           </div>
+          <div id="p2-label-export" style="display:none;gap:6px 14px;flex-wrap:wrap;align-items:center;margin-bottom:12px;font-size:11px"></div>
           <div id="p2-label-table" style="overflow-x:auto"></div>
         </div>
       </div>
@@ -3440,8 +3441,20 @@ function p2UpdateLabelDropdown(){
     if(v.vLabels) for(const l in v.vLabels){ if(l) allLabels.add(l); }
     else if(v.label) allLabels.add(v.label);   // เผื่อข้อมูลเก่าที่ยังไม่มี vLabels
   }));
+  const sortedLabels=[...allLabels].sort();
   sel.innerHTML='<option value="">🏷 ทุก Label</option>'+
-    [...allLabels].sort().map(l=>`<option value="${l}"${l===cur?' selected':''}>${l}</option>`).join('');
+    sortedLabels.map(l=>`<option value="${l}"${l===cur?' selected':''}>${l}</option>`).join('');
+
+  // checkbox เลือกหลาย label สำหรับ Export PPTX (ติ๊กได้หลายอัน → สไลด์ table+WoW ต่อ label)
+  const exp=$('p2-label-export');
+  if(exp){
+    if(sortedLabels.length){
+      const prevChecked=new Set([...exp.querySelectorAll('.p2-export-label-chk:checked')].map(c=>c.value));
+      exp.style.display='flex';
+      exp.innerHTML='<span style="color:var(--fg3)">📑 Export หลาย label:</span>'+
+        sortedLabels.map(l=>`<label style="display:inline-flex;align-items:center;gap:4px;cursor:pointer;color:var(--fg2)"><input type="checkbox" class="p2-export-label-chk" value="${l}"${prevChecked.has(l)?' checked':''}>${l}</label>`).join('');
+    } else { exp.style.display='none'; exp.innerHTML=''; }
+  }
   p2RenderLabel();
 }
 
@@ -4490,9 +4503,13 @@ async function exportPPTX(){
       ],{x:2.5,y:5.9,w:8.3,colW:[2.0,1.8,1.8,1.5,1.2],border:{type:'solid',pt:0.5,color:'DDDDDD'},rowH:0.28});
     }
 
-    // ── SLIDE: Label Top 20 (ถ้ามี label ถูกเลือก) ─────────────
-    const selLabel = ($('p2-label-sel')?.value)||'';
-    if(selLabel && p2WeekData.length>=2){
+    // ── SLIDE: Label Top 20 + WoW (ต่อ label ที่เลือก) ─────────────
+    // เลือกได้หลาย label ผ่าน checkbox; ถ้าไม่ติ๊กเลย = ใช้ label ที่ค้างใน dropdown (พฤติกรรมเดิม)
+    const _lblChecked = [...document.querySelectorAll('.p2-export-label-chk')].filter(c=>c.checked).map(c=>c.value);
+    const _lblDrop = ($('p2-label-sel')?.value)||'';
+    const exportLabels = _lblChecked.length ? _lblChecked : (_lblDrop ? [_lblDrop] : []);
+    if(exportLabels.length && p2WeekData.length>=2){
+     const buildLabelSlides = (selLabel)=>{
       const prevWD=p2WeekData[p2WeekData.length-2];
       const latWD=p2WeekData[p2WeekData.length-1];
       const vget=(wd,k)=>{ const v=wd&&wd.songMap.get(k); if(!v) return 0; return v.vLabels?(v.vLabels[selLabel]||0):(v.label===selLabel?(v.streams||0):0); };
@@ -4508,6 +4525,10 @@ async function exportPPTX(){
         return {name:v?.name||k.split('\x00')[0],artist:v?.artist||'',curr,prev};
       }).filter(r=>r.curr>0||r.prev>0).sort((a,b)=>b.curr-a.curr).slice(0,20);
 
+      // total label streams (ทุกเพลง ไม่ใช่แค่ top 20) สำหรับกราฟแท่ง WoW
+      let labelPrevTotal=0, labelCurrTotal=0;
+      allKeys.forEach(k=>{ labelPrevTotal+=vget(prevWD,k); labelCurrTotal+=vget(latWD,k); });
+
       if(labelRows.length){
         const sL=pres.addSlide(); addBg(sL);
         sL.addText(`Top Stream · ${selLabel}`,{x:1.5,y:0.25,w:10,h:0.5,fontSize:15,bold:true,color:C.dark,align:'center'});
@@ -4515,15 +4536,15 @@ async function exportPPTX(){
         const lRows=labelRows.map((r,i)=>{
           tLP+=r.prev; tLC+=r.curr;
           const diff=r.curr-r.prev;
-          const pct=r.prev>0?((diff/r.prev)*100).toFixed(2)+'%':'NEW';
+          const pct=r.prev>0?((diff/r.prev)*100).toFixed(2)+'%':'-';
           const fill={color:i%2===0?C.white:C.rowAlt};
           return [
             {text:String(i+1),options:{fill,align:'center',fontSize:9,color:C.gray}},
             {text:r.name,options:{fill,fontSize:9,color:C.dark}},
             {text:r.artist,options:{fill,fontSize:9,color:C.gray}},
             {text:r.prev>0?fmt(r.prev):'-',options:{fill,align:'right',fontSize:9,color:C.gray}},
-            {text:fmt(r.curr),options:{fill,align:'right',fontSize:9,bold:true,color:C.dark}},
-            {text:(diff>=0?'+ ':'- ')+fmt(Math.abs(diff)),options:{fill,align:'right',fontSize:9,color:diff>=0?C.green:C.red}},
+            {text:r.curr>0?fmt(r.curr):'-',options:{fill,align:'right',fontSize:9,bold:true,color:C.dark}},
+            {text:r.prev>0?(diff>=0?'+ ':'- ')+fmt(Math.abs(diff)):'-',options:{fill,align:'right',fontSize:9,color:diff>=0?C.green:C.red}},
             {text:fmtPct(pct),options:{fill,align:'right',fontSize:9,bold:true,color:pctColor(pct)}},
           ];
         });
@@ -4535,7 +4556,46 @@ async function exportPPTX(){
           x:0.35,y:0.85,w:12.5,colW:[0.5,4.0,2.5,1.5,1.6,1.2,1.2],
           border:{type:'solid',pt:0.3,color:'DDDDDD'},rowH:0.25,
         });
+
+        // ── กราฟแท่ง WoW ต่อ label (single-series แบบสไลด์ Download) ──
+        const lbDiff = labelCurrTotal - labelPrevTotal;
+        const lbPct = labelPrevTotal>0 ? (lbDiff/labelPrevTotal)*100 : 0;
+        const lbPctStr = (lbPct>=0?'+':'')+lbPct.toFixed(2)+' %';
+        const lbArrow = lbDiff>=0 ? '00AA44' : 'CC0000';
+        const lbPrevLbl = prevWD.label||'Prev WW';
+        const lbCurrLbl = latWD.label||'Curr WW';
+        const lbMin = Math.round(Math.min(labelPrevTotal,labelCurrTotal)*0.9);
+
+        const sLB = pres.addSlide(); addBg(sLB);
+        sLB.addText(`Stream · ${selLabel}`,{x:1.5,y:0.25,w:10,h:0.5,fontSize:15,bold:true,color:C.dark,align:'center'});
+        sLB.addChart(pres.charts.BAR,[
+          {name:'Streams', labels:[lbPrevLbl,lbCurrLbl], values:[labelPrevTotal,labelCurrTotal]},
+        ],{x:2.2,y:0.65,w:8.8,h:5.1,barDir:'col',
+          chartColors:[C.blue,C.blue],
+          chartArea:{fill:{color:'F5F5F5'}},plotArea:{fill:{color:'F5F5F5'}},
+          catAxisFontSize:11,valAxisFontSize:9,showLegend:false,
+          showValue:true,dataLabelFontSize:12,dataLabelPosition:'outEnd',
+          valAxisMinVal:lbMin});
+
+        const lbArrowShape = lbDiff>=0 ? pres.shapes.UP_ARROW : pres.shapes.DOWN_ARROW;
+        sLB.addShape(lbArrowShape,{x:5.85,y:2.75,w:0.55,h:0.65,fill:{color:lbArrow},line:{color:lbArrow}});
+        sLB.addText(lbPctStr,{x:5.1,y:3.5,w:2.0,h:0.6,fontSize:20,bold:true,color:lbArrow,align:'center'});
+
+        sLB.addTable([
+          [{text:'Week',options:{fill:{color:C.totalBg},bold:true,fontSize:10}},
+           {text:lbPrevLbl,options:{fill:{color:C.totalBg},bold:true,align:'center',fontSize:10}},
+           {text:lbCurrLbl,options:{fill:{color:C.totalBg},bold:true,align:'center',fontSize:10}},
+           {text:'Unit Change',options:{fill:{color:C.totalBg},bold:true,align:'center',fontSize:10}},
+           {text:'% Change',options:{fill:{color:C.totalBg},bold:true,align:'center',fontSize:10}}],
+          [{text:'Streams',options:{fill:{color:C.white},bold:true,fontSize:10}},
+           {text:fmt(labelPrevTotal),options:{fill:{color:C.white},align:'right',fontSize:10}},
+           {text:fmt(labelCurrTotal),options:{fill:{color:C.white},align:'right',fontSize:10}},
+           {text:(lbDiff>=0?'+ ':'- ')+fmt(Math.abs(lbDiff)),options:{fill:{color:C.white},align:'right',fontSize:10,color:lbDiff>=0?C.green:C.red}},
+           {text:labelPrevTotal>0?lbPct.toFixed(2)+'%':'—',options:{fill:{color:C.white},align:'right',bold:true,fontSize:10,color:lbDiff>=0?C.green:C.red}}],
+        ],{x:2.5,y:5.9,w:8.3,colW:[2.0,1.8,1.8,1.5,1.2],border:{type:'solid',pt:0.5,color:'DDDDDD'},rowH:0.28});
       }
+     };
+     exportLabels.forEach(buildLabelSlides);
     }
 
     // ── Download ─────────────────────────────────────────────
