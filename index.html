@@ -4387,6 +4387,12 @@ async function exportPPTX(){
          {text:fmt(latT), options:{fill:{color:C.white},align:'right',fontSize:10}},
          {text:(diff>=0?'+ ':'- ')+fmt(Math.abs(diff)),options:{fill:{color:C.white},align:'right',fontSize:10,color:diff>=0?C.green:C.red}},
          {text:(pct>=0?'+':'')+pct.toFixed(2)+'%',options:{fill:{color:C.white},align:'right',bold:true,fontSize:11,color:pct>=0?C.green:C.red}}],
+        // แถว Revenue เว้นว่างไว้ให้กรอกเอง (คิดเรตต่อ stream อัตโนมัติไม่ได้)
+        [{text:'Revenue',options:{fill:{color:C.white},bold:true,fontSize:10}},
+         {text:'',options:{fill:{color:C.white},align:'right',fontSize:10}},
+         {text:'',options:{fill:{color:C.white},align:'right',fontSize:10}},
+         {text:'',options:{fill:{color:C.white},align:'right',fontSize:10}},
+         {text:'',options:{fill:{color:C.white},align:'right',fontSize:10}}],
       ],{x:2.5,y:5.9,w:8.3,colW:[1.5,2.0,2.0,1.8,1.0],border:{type:'solid',pt:0.5,color:'DDDDDD'},rowH:0.3});
     }
 
@@ -4413,6 +4419,10 @@ async function exportPPTX(){
         [{text:'Streams',options:{fill:{color:C.white},bold:true,fontSize:9}},
          ...totals.map(t=>({text:fmt(t),options:{fill:{color:C.white},align:'right',fontSize:9}})),
          {text:fmt(totals.reduce((a,b)=>a+b,0)),options:{fill:{color:C.white},align:'right',bold:true,fontSize:9}}],
+        // แถว Revenue เว้นว่างไว้ให้กรอกเอง (คิดเรตต่อ stream อัตโนมัติไม่ได้)
+        [{text:'Revenue',options:{fill:{color:C.white},bold:true,fontSize:9}},
+         ...labels.map(()=>({text:'',options:{fill:{color:C.white},align:'right',fontSize:9}})),
+         {text:'',options:{fill:{color:C.white},align:'right',bold:true,fontSize:9}}],
       ],{x:0.5,y:5.75,w:12.3,colW,border:{type:'solid',pt:0.3,color:'DDDDDD'},rowH:0.28});
     }
 
