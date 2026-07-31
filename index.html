@@ -1939,9 +1939,18 @@ function p2MakeZone(idx, type){
   return wrap;
 }
 
+// เลขสัปดาห์ใหม่ = max(เลข WW ที่มีอยู่)+1 — ไม่ใช้เลขซ้ำ
+// (กัน label ชน "WW N · Days" ตอน sliding-window renumber → เพลงซ้ำวีคก่อน)
+function p2NextWWNum(){
+  let mx=0;
+  const scan=w=>{ const m=/^WW\s*(\d+)/i.exec((w&&w.label)||''); if(m) mx=Math.max(mx,+m[1]); };
+  p2Weeks.forEach(scan); p2WeekData.forEach(scan);
+  return mx+1;
+}
+
 function p2AddWeek(){
   if(p2Weeks.length>=P2_MAX_WEEKS){toast('สูงสุด '+P2_MAX_WEEKS+' สัปดาห์');return;}
-  p2Weeks.push({label:'WW '+(p2Weeks.length+1),wwFile:null,appleFile:null,virginFile:null});
+  p2Weeks.push({label:'WW '+p2NextWWNum(),wwFile:null,appleFile:null,virginFile:null});
   p2RenderWeekZones(); p2UpdateBtn();
 }
 
@@ -3579,7 +3588,7 @@ function p2RenderRestored(){
   if(!p2WeekData.length) return;
   try{
     p2Weeks = p2WeekData.map(wd=>({label:wd.label,wwFile:null,appleFile:null,virginFile:null,_fromStorage:true}));
-    p2Weeks.push({label:'WW '+(p2Weeks.length+1),wwFile:null,appleFile:null,virginFile:null});
+    p2Weeks.push({label:'WW '+p2NextWWNum(),wwFile:null,appleFile:null,virginFile:null});
     p2RenderWeekZones(); p2UpdateBtn();
     const latest=p2WeekData[p2WeekData.length-1];
     const prev=p2WeekData.length>1?p2WeekData[p2WeekData.length-2]:null;
@@ -3664,7 +3673,7 @@ function stSaveP2(){
   p2Weeks = p2WeekData.map(wd=>({
     label: wd.label, wwFile:null, appleFile:null, virginFile:null, _fromStorage:true
   }));
-  p2Weeks.push({label:'WW '+(p2Weeks.length+1), wwFile:null, appleFile:null, virginFile:null});
+  p2Weeks.push({label:'WW '+p2NextWWNum(), wwFile:null, appleFile:null, virginFile:null});
   p2RenderWeekZones();
   p2UpdateBtn();
 
