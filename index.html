@@ -962,6 +962,35 @@ function parseAppleP1(file){
   });
 }
 
+// ── ช่วงวันที่จาก "เนื้อในไฟล์ Apple" (typo-proof — ไม่พึ่งชื่อไฟล์) ──
+// "Jul 6, 2026" + "Jul 12, 2026" → "Jul 6 - 12, 2026" (ข้ามเดือน → "Jun 29 - Jul 5, 2026")
+function p2FmtRange(a,b){
+  const p=s=>{ const m=/^([A-Za-z]{3,})\s+(\d{1,2}),?\s*(\d{4})?/.exec(String(s).trim()); return m?{mon:m[1],day:m[2],year:m[3]||''}:null; };
+  const A=p(a),B=p(b);
+  if(!A||!B) return String(a).trim()+' - '+String(b).trim();
+  const yr=B.year||A.year;
+  return A.mon===B.mon ? `${A.mon} ${A.day} - ${B.day}, ${yr}` : `${A.mon} ${A.day} - ${B.mon} ${B.day}, ${yr}`;
+}
+function p2ExtractDate(raw){
+  // 1) row0[1] ถ้าเป็นช่วงวันจริง เช่น "Week: Jul 6 - 12, 2026" (ไฟล์ Top100)
+  let dr=(raw[0]&&raw[0][1]!=null)?String(raw[0][1]).trim():'';
+  dr=dr.replace(/^week\s*:?\s*/i,'').trim();
+  if(dr && dr.toLowerCase()!=='days') return dr;
+  // 2) แถว Measure → วันแรก..วันสุดท้ายก่อน Total (ไฟล์ WW Number)
+  for(const r of (raw||[])){
+    if(r && String(r[0]||'').trim().toLowerCase()==='measure'){
+      const ds=[];
+      for(let j=1;j<r.length;j++){
+        const c=String(r[j]==null?'':r[j]).trim();
+        if(!c || c.toLowerCase()==='total') break;
+        ds.push(c);
+      }
+      if(ds.length) return p2FmtRange(ds[0], ds[ds.length-1]);
+    }
+  }
+  return '';
+}
+
 function parseAppleP2(file){
   return new Promise((res,rej)=>{
     const rd=new FileReader();
@@ -969,8 +998,7 @@ function parseAppleP2(file){
       try{
         const wb=XLSX.read(new Uint8Array(e.target.result),{type:'array'});
         const raw=XLSX.utils.sheet_to_json(wb.Sheets[wb.SheetNames[0]],{header:1,defval:null});
-        let dateRange='';
-        if(raw[0]&&raw[0][1]) dateRange=raw[0][1].toString().trim();
+        const dateRange = p2ExtractDate(raw);
 
         // ── ตรวจ format: WW Number (Measure/Streams) หรือ song-list ──
         // WW Number: row 3 = ['Measure','May 18','...','Total'], row 4 = ['Streams',N,N,...,TOTAL]
@@ -2005,7 +2033,7 @@ async function p2Run(){
 
       // parse ไฟล์ใหม่
       const songMap=new Map();
-      let appleTotal=0, virginTotal=0;
+      let appleTotal=0, virginTotal=0, wwDate='', topDate='';
 
       // ── Apple WW Number ──────────────────────────────────────
       if(wk.wwFile){
@@ -2016,11 +2044,7 @@ async function p2Run(){
           appleTotal=r.total;
           r.rows.forEach(x=>{if(!x.name)return;const k=mkKey(x.name,x.artist);const ex=songMap.get(k)||{name:x.name,artist:x.artist,streams:0};ex.streams+=x.curr;songMap.set(k,ex);});
         }
-        // Gap #3: auto-label จาก dateRange ในไฟล์ถ้า label ยังเป็น default
-        if(r.dateRange && /^WW\s*\d+$/i.test(wk.label)){
-          wk.label = wk.label + ' · ' + r.dateRange;
-          p2RenderWeekZones();
-        }
+        wwDate = r.dateRange || '';
       }
 
       // ── Apple Top 100 ─────────────────────────────────────────
@@ -2030,6 +2054,18 @@ async function p2Run(){
           r.rows.forEach(x=>{if(!x.name)return;const k=mkKey(x.name,x.artist);const ex=songMap.get(k)||{name:x.name,artist:x.artist,streams:0};ex.streams+=x.curr;songMap.set(k,ex);});
           if(!wk.wwFile) appleTotal=r.total;
         } else { if(!wk.wwFile) appleTotal=r.total; }
+        topDate = r.dateRange || '';
+      }
+
+      // ── ตั้ง label จากช่วงวันที่ "ในไฟล์ Apple" (Top100 ก่อน) — typo-proof ──
+      // เตือนถ้า 2 ไฟล์ Apple วันไม่ตรง = อาจใส่ไฟล์สลับ (Virgin เช็คไม่ได้ ไม่มีวันในตัว)
+      const weekDate = topDate || wwDate;
+      if(wwDate && topDate && wwDate!==topDate){
+        toast(`⚠ วันที่ 2 ไฟล์ Apple ไม่ตรงกัน (${wwDate} vs ${topDate}) — อาจใส่ไฟล์สลับ`);
+      }
+      if(weekDate && /^WW\s*\d+$/i.test(wk.label)){
+        wk.label = wk.label + ' · ' + weekDate;
+        p2RenderWeekZones();
       }
 
       // ── Virgin ────────────────────────────────────────────────
