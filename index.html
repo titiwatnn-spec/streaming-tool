@@ -4526,8 +4526,10 @@ async function exportPPTX(){
         const td2=tCurr-tPrev;
         const totRow2=[['',' ',' ',' ',fmt(tPrev),fmt(tCurr),fmt(td2),tPrev>0?((td2/tPrev)*100).toFixed(2)+'%':'—'].map((t,i)=>
           ({text:t,options:{fill:{color:C.totalBg},align:i>3?'right':'left',bold:true,fontSize:9}}))];
-        sN.addTable([...hdrRow(['No','Name','Artist','Type','Prev WW','Curr WW','Change','% Chg']),...tblRows,...totRow2],{
-          x:0.35,y:0.85,w:12.5,colW:[0.5,3.8,2.5,1.2,1.2,1.2,1.0,1.1],
+        // หัวคอลัมน์ใช้ label สัปดาห์จริง (มีช่วงวันที่) เหมือนสไลด์ Top Stream / WoW
+        // คอลัมน์วันที่กว้างขึ้น (1.2 → 1.6) กันข้อความตกบรรทัด
+        sN.addTable([...hdrRow(['No','Name','Artist','Type',(prevP3?.label)||'Prev WW',latP3.label||'Curr WW','Change','% Chg']),...tblRows,...totRow2],{
+          x:0.35,y:0.85,w:12.5,colW:[0.5,3.5,2.2,1.0,1.6,1.6,1.0,1.1],
           border:{type:'solid',pt:0.3,color:'DDDDDD'},rowH:0.24,
         });
       }
