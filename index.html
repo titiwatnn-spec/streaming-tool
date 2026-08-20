@@ -4469,12 +4469,42 @@ async function exportPPTX(){
       const appleV=momArr.map(m=>m.apple||0);
       const virginV=momArr.map(m=>m.virgin||0);
       const totals=momArr.map(m=>(m.apple||0)+(m.virgin||0));
+      // เผื่อที่ว่างเหนือแท่งไว้วางลูกศร MoM — ดันเพดานแกน Y ขึ้น ~45% แล้วปัดเป็นเลขกลม
+      const s3DataMax = Math.max(...totals, 1);
+      const s3Mag = Math.pow(10, Math.floor(Math.log10(s3DataMax)));
+      const s3Step = s3Mag/5;
+      const s3AxisMax = Math.ceil((s3DataMax*1.45)/s3Step)*s3Step;
+
+      const S3_X=1.8, S3_Y=0.85, S3_W=9.5, S3_H=4.6;
       s3.addChart(pres.charts.BAR,[
         {name:'🍎 Apple', labels,values:appleV},
         {name:'🟢 Virgin',labels,values:virginV},
-      ],{x:1.8,y:0.85,w:9.5,h:4.6,barDir:'col',barGrouping:'stacked',
+      ],{x:S3_X,y:S3_Y,w:S3_W,h:S3_H,barDir:'col',barGrouping:'stacked',
         chartColors:['4472C4',C.orange],chartArea:{fill:{color:C.white}},
-        catAxisFontSize:9,valAxisFontSize:8,showLegend:true,legendPos:'b',legendFontSize:10});
+        catAxisFontSize:9,valAxisFontSize:8,showLegend:true,legendPos:'b',legendFontSize:10,
+        valAxisMaxVal:s3AxisMax});
+
+      // ── ลูกศร + %change ของแต่ละเดือน (เทียบเดือนก่อนหน้า) ──
+      // PowerPoint จัด plot area เอง วัดตรงๆ ไม่ได้ → ประมาณจากขอบกราฟ
+      // (เผื่อ label แกน Y ด้านซ้าย ~0.78" · ขอบขวา ~0.12")
+      // ถ้าลูกศรเยื้องซ้าย/ขวา ปรับ 2 ค่านี้ได้
+      const S3_PLOT_L=0.78, S3_PLOT_R=0.12;
+      const s3PlotX = S3_X + S3_PLOT_L;
+      const s3SlotW = (S3_W - S3_PLOT_L - S3_PLOT_R) / labels.length;
+      const s3ArrowW = Math.min(0.42, s3SlotW*0.34);
+
+      for(let i=1;i<totals.length;i++){
+        const prev=totals[i-1], curr=totals[i];
+        if(!prev) continue;
+        const pct=(curr-prev)/prev*100;
+        const up=pct>=0;
+        const col=up?'00AA44':'CC0000';
+        const cx=s3PlotX + s3SlotW*(i+0.5);
+        s3.addShape(up?pres.shapes.UP_ARROW:pres.shapes.DOWN_ARROW,
+          {x:cx-s3ArrowW/2, y:1.12, w:s3ArrowW, h:0.5, fill:{color:col}, line:{color:col}});
+        s3.addText(pct.toFixed(1)+' %',
+          {x:cx-s3SlotW/2, y:1.66, w:s3SlotW, h:0.34, fontSize:12, bold:true, color:col, align:'center', margin:0});
+      }
       const colW=labels.length<=6?[1.5,...labels.map(()=>1.8),1.6]:[1.2,...labels.map(()=>1.5),1.3];
       s3.addTable([
         [{text:'',options:{fill:{color:C.totalBg},bold:true,fontSize:9}},
