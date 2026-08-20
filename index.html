@@ -272,9 +272,14 @@ td.src{text-align:center;width:110px} td.art{color:var(--fg2)}
 .p2-tl-table td{padding:7px 10px;border-bottom:1px solid var(--line);white-space:nowrap;text-align:center}
 .p2-tl-table td.tl-name{text-align:left;font-weight:600}
 .p2-tl-table tr:hover td{background:rgba(0,0,0,.02)}
-.tl-rank{font-family:var(--mono);font-size:11px;font-weight:700;color:var(--fg2)}
-.tl-rank.r1{color:var(--gold)} .tl-rank.r2{color:#94a3b8} .tl-rank.r3{color:#b45309}
-.tl-streams{font-family:var(--mono);font-size:11px;color:var(--teal);font-weight:600}
+/* rank = ป้ายเล็กมี # (อ่านเป็น "อันดับ") · streams = ตัวเลขเด่นสีเขียว — กันสับสนว่าอันดับคือยอดวิว */
+.tl-rank{font-family:var(--mono);font-size:9.5px;font-weight:700;color:var(--fg3);
+  background:var(--bg3);border:1px solid var(--line);border-radius:999px;
+  padding:0 5px;line-height:15px;display:inline-block;min-width:30px}
+.tl-rank.r1{color:#fff;background:var(--gold);border-color:transparent}
+.tl-rank.r2{color:#fff;background:#94a3b8;border-color:transparent}
+.tl-rank.r3{color:#fff;background:#b45309;border-color:transparent}
+.tl-streams{font-family:var(--mono);font-size:12px;color:var(--teal);font-weight:700;letter-spacing:.2px}
 .tl-chg{font-family:var(--mono);font-size:9px;font-weight:700}
 .tl-chg.up{color:var(--green-text)} .tl-chg.dn{color:var(--red-text)}
 .tl-cell{display:flex;flex-direction:column;align-items:center;gap:1px}
@@ -962,16 +967,16 @@ function parseAppleP1(file){
   });
 }
 
-// ── ช่วงวันที่จาก "เนื้อในไฟล์ Apple" (typo-proof — ไม่พึ่งชื่อไฟล์) ──
+// ── ช่วงวันที่จาก "เนื้อในไฟล์ Apple" (typo-proof — ไม่พึ่งชื่อไฟล์) · ใช้ทั้ง WW และ Ringtone+Song ──
 // "Jul 6, 2026" + "Jul 12, 2026" → "Jul 6 - 12, 2026" (ข้ามเดือน → "Jun 29 - Jul 5, 2026")
-function p2FmtRange(a,b){
+function appleFmtRange(a,b){
   const p=s=>{ const m=/^([A-Za-z]{3,})\s+(\d{1,2}),?\s*(\d{4})?/.exec(String(s).trim()); return m?{mon:m[1],day:m[2],year:m[3]||''}:null; };
   const A=p(a),B=p(b);
   if(!A||!B) return String(a).trim()+' - '+String(b).trim();
   const yr=B.year||A.year;
   return A.mon===B.mon ? `${A.mon} ${A.day} - ${B.day}, ${yr}` : `${A.mon} ${A.day} - ${B.mon} ${B.day}, ${yr}`;
 }
-function p2ExtractDate(raw){
+function appleExtractDate(raw){
   // 1) row0[1] ถ้าเป็นช่วงวันจริง เช่น "Week: Jul 6 - 12, 2026" (ไฟล์ Top100)
   let dr=(raw[0]&&raw[0][1]!=null)?String(raw[0][1]).trim():'';
   dr=dr.replace(/^week\s*:?\s*/i,'').trim();
@@ -985,7 +990,7 @@ function p2ExtractDate(raw){
         if(!c || c.toLowerCase()==='total') break;
         ds.push(c);
       }
-      if(ds.length) return p2FmtRange(ds[0], ds[ds.length-1]);
+      if(ds.length) return appleFmtRange(ds[0], ds[ds.length-1]);
     }
   }
   return '';
@@ -998,7 +1003,7 @@ function parseAppleP2(file){
       try{
         const wb=XLSX.read(new Uint8Array(e.target.result),{type:'array'});
         const raw=XLSX.utils.sheet_to_json(wb.Sheets[wb.SheetNames[0]],{header:1,defval:null});
-        const dateRange = p2ExtractDate(raw);
+        const dateRange = appleExtractDate(raw);
 
         // ── ตรวจ format: WW Number (Measure/Streams) หรือ song-list ──
         // WW Number: row 3 = ['Measure','May 18','...','Total'], row 4 = ['Streams',N,N,...,TOTAL]
@@ -2276,7 +2281,7 @@ function p2RenderTimeline(){
 
   let html=`<table class="p2-tl-table"><thead><tr>
     <th class="tl-name">#  เพลง / ศิลปิน</th>
-    ${labels.map(l=>`<th>${esc(l)}<br><span style="font-weight:400;font-size:8px;color:var(--fg3)">อันดับ · streams</span></th>`).join('')}
+    ${labels.map(l=>`<th>${esc(l)}<br><span style="font-weight:400;font-size:8px;color:var(--fg3)">#อันดับ · <span style="color:var(--teal)">streams</span></span></th>`).join('')}
     <th>Trend</th>
   </tr></thead><tbody>`;
 
@@ -2298,7 +2303,7 @@ function p2RenderTimeline(){
         chg='<span style="color:var(--gold);font-size:9px;font-weight:700">NEW</span>';
       }
       const rkCls=wk.rank===1?'r1':wk.rank===2?'r2':wk.rank===3?'r3':'';
-      return `<td><div class="tl-cell"><span class="tl-rank ${rkCls}">${wk.rank}</span><span class="tl-streams">${fmtK(wk.streams)}</span>${chg}</div></td>`;
+      return `<td><div class="tl-cell"><span class="tl-rank ${rkCls}">#${wk.rank}</span><span class="tl-streams">${fmtK(wk.streams)}</span>${chg}</div></td>`;
     });
     const validStreams=weekRanks.filter(Boolean).map(x=>x.streams);
     const first=validStreams[0]||0, last=validStreams[validStreams.length-1]||0;
@@ -2546,9 +2551,18 @@ function p3OverwriteSlot(idx){
   p3RenderWeekZones();
 }
 
+// เลขสัปดาห์ใหม่ = max(เลข WW ที่มีอยู่)+1 — ไม่ใช้เลขซ้ำ (เหมือน p2NextWWNum)
+// กัน label ชน → สัปดาห์ใหม่ไปทับ/อ้างข้อมูลสัปดาห์เก่า (ยอดเปลี่ยนเองตอน refresh)
+function p3NextWWNum(){
+  let mx=0;
+  const scan=w=>{ const m=/^WW\s*(\d+)/i.exec((w&&w.label)||''); if(m) mx=Math.max(mx,+m[1]); };
+  p3Weeks.forEach(scan); p3WeekData.forEach(scan);
+  return mx+1;
+}
+
 function p3AddWeek(){
   if(p3Weeks.length >= P3_MAX_WEEKS){ toast('สูงสุด '+P3_MAX_WEEKS+' สัปดาห์'); return; }
-  p3Weeks.push({label:'WW '+(p3Weeks.length+1), file:null});
+  p3Weeks.push({label:'WW '+p3NextWWNum(), file:null});
   p3RenderWeekZones(); p3UpdateBtn();
 }
 
@@ -2628,7 +2642,7 @@ async function parseAppleP3(file){
           const artist   = String(r[iArtist]||'').trim();
           if(units>0||prevUnits>0) rows.push({appleId,name,artist,type,units,prevUnits});
         }
-        const dateLabel = String((raw[0]||[])[1]||'').trim();
+        const dateLabel = appleExtractDate(raw);   // "Jul 6 - 12, 2026" (ตัด "Week: " ให้แล้ว)
         const rowsSum = rows.reduce((s,r)=>s+r.units,0);
         // คืนค่า manualTotal แยกจาก rowsSum เพื่อให้ p3Run รู้ว่ามี Apple total จริงหรือเปล่า
         resolve({rows, dateLabel, manualTotal: manualTotal||null, rowsSum});
@@ -2658,6 +2672,11 @@ async function p3Run(){
       if(!wk.file) continue;
 
       const parsed = await parseAppleP3(wk.file);
+      // ใส่ช่วงวันที่จากไฟล์ต่อท้าย label ให้รู้ว่าเป็นสัปดาห์ไหน (เหมือน WW Streams)
+      if(parsed.dateLabel && /^WW\s*\d+$/i.test(wk.label)){
+        wk.label = wk.label + ' · ' + parsed.dateLabel;
+        p3RenderWeekZones();
+      }
       const label = wk.label || parsed.dateLabel || ('WW '+(i+1));
       mergedWeekData.push({label, rows: parsed.rows, dateLabel: parsed.dateLabel, manualTotal: parsed.manualTotal, rowsSum: parsed.rowsSum||0});
     }
@@ -3761,7 +3780,7 @@ function stSaveP3(){
 
   // ── rebuild p3Weeks slots ────────────────────────────────────
   p3Weeks = p3WeekData.map(wd=>({label:wd.label, file:null, _fromStorage:true}));
-  p3Weeks.push({label:'WW '+(p3Weeks.length+1), file:null});
+  p3Weeks.push({label:'WW '+p3NextWWNum(), file:null});
   p3RenderWeekZones();
   p3UpdateBtn();
 }
@@ -3967,7 +3986,7 @@ function stRestoreAll(){
     restored.push(`P3: ${p3WeekData.length} สัปดาห์`);
     try{
       p3Weeks=p3WeekData.map(wd=>({label:wd.label,file:null,_fromStorage:true}));
-      p3Weeks.push({label:'WW '+(p3Weeks.length+1),file:null});
+      p3Weeks.push({label:'WW '+p3NextWWNum(),file:null});
       p3RenderWeekZones(); p3UpdateBtn();
       const latest=p3WeekData[p3WeekData.length-1];
       const rtRows=latest.rows.filter(r=>r.type==='Ringtone'||r.type==='Ringtone ');
